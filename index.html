@@ -19,11 +19,11 @@
     <div class="menu-btns">
       <button class="mode-btn m-normal" data-mode="normal">
         <span class="mb-name">普通模式</span>
-        <span class="mb-desc">经典节奏 · 慢慢清空整个立方体</span>
+        <span class="mb-desc">经典节奏 · 5×5 逐关增至 10×10</span>
       </button>
       <button class="mode-btn m-challenge" data-mode="challenge">
         <span class="mb-name">挑战模式</span>
-        <span class="mb-desc">限时闯关 · 立方体越清越大</span>
+        <span class="mb-desc">限时闯关 · 5×5 逐关增至 10×10</span>
       </button>
     </div>
     <div class="best-line">最高分 <b id="menuBest">0</b></div>
@@ -47,6 +47,18 @@
       <div class="score" id="hudScore">0</div>
       <div class="score-sub">目标 <span id="hudTarget">0</span></div>
       <div class="prog"><i id="progFill"></i></div>
+    </div>
+  </div>
+  <div class="zoom-control" role="group" aria-label="视角缩放">
+    <button id="btnResetView" class="zoom-reset" type="button" aria-label="恢复初始视角和大小" title="恢复初始视角和大小">
+      <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+        <circle cx="16" cy="16" r="10"/><circle cx="16" cy="16" r="4"/>
+        <path d="M16 2v6m0 16v6M2 16h6m16 0h6"/>
+      </svg>
+    </button>
+    <div class="zoom-slider-wrap">
+      <span class="zoom-plus" aria-hidden="true">+</span>
+      <input id="zoomSlider" type="range" min="0" max="100" step="0.1" value="0" aria-label="游戏缩放，向上放大" aria-orientation="vertical" aria-valuetext="100%" />
     </div>
   </div>
   <div class="hud-bottom">

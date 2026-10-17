@@ -215,6 +215,46 @@ canvas#gl {
 .icon-btn:active { transform: scale(.93); }
 .icon-btn.off { color: #59617f; }
 
+/* 左下角竖向缩放：保留整条 48px 的可操作区域。 */
+.zoom-control {
+  position: absolute; left: max(18px, env(safe-area-inset-left));
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  pointer-events: auto;
+}
+.zoom-reset {
+  width: 44px; height: 44px; display: grid; place-items: center;
+  border: 2px solid #637089; border-radius: 9px;
+  background: #a9b9d3; color: #fff; cursor: pointer;
+  box-shadow: 0 2px 5px #0005, inset 0 1px 2px #fff8;
+}
+.zoom-reset:hover { background: #bdcce3; }
+.zoom-reset:active { background: #8399bd; }
+.zoom-slider-wrap { position: relative; width: 48px; height: 160px; }
+#zoomSlider {
+  appearance: none; -webkit-appearance: none;
+  writing-mode: vertical-lr; direction: rtl;
+  display: block; margin: 0; width: 48px; height: 160px;
+  background: transparent; cursor: ns-resize; touch-action: none;
+}
+#zoomSlider::-webkit-slider-runnable-track {
+  width: 18px; background: #bdc2c9; border: 2px solid #4b515d; border-radius: 12px;
+}
+#zoomSlider::-webkit-slider-thumb {
+  appearance: none; -webkit-appearance: none;
+  width: 44px; height: 44px; margin-left: -15px;
+  border: 2px solid #4b515d; border-radius: 50%; background: #fff;
+  box-shadow: 0 2px 4px #0004;
+}
+#zoomSlider::-moz-range-track { width: 14px; height: 100%; background: #bdc2c9; border: 2px solid #4b515d; border-radius: 12px; }
+#zoomSlider::-moz-range-thumb { width: 40px; height: 40px; border: 2px solid #4b515d; border-radius: 50%; background: #fff; }
+.zoom-plus { position: absolute; top: 5px; left: 0; width: 48px; text-align: center; color: #666d78; font: bold 23px/24px sans-serif; pointer-events: none; }
+.zoom-reset:focus-visible, #zoomSlider:focus-visible { outline: 3px solid #6bddff; outline-offset: 5px; border-radius: 12px; }
+@media (max-height: 560px) {
+  .zoom-control { bottom: calc(82px + env(safe-area-inset-bottom)); gap: 8px; }
+  .zoom-slider-wrap, #zoomSlider { height: 112px; }
+}
+
 /* ====== 分数飘字 ====== */
 #toasts { position: fixed; inset: 0; z-index: 6; pointer-events: none; }
 .toast {

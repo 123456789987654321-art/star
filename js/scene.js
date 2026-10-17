@@ -1,4 +1,4 @@
-/* WebGL 渲染层：立方体核 + 星星方块 + 粒子 + 射线拾取 */
+/* WebGL 渲染层：方块外壳、方向箭头、粒子和射线拾取 */
 (function (g) {
   'use strict';
   const MX = g.MX;
@@ -50,6 +50,15 @@
     '}',
 
     'void main(){',
+    '  if (uFlags.x < -0.5) {',
+    '    if (vOut < 0.5) discard;',
+    '    float x = abs(vUV.x); float y = vUV.y;',
+    '    bool stem = x < 0.10 && y > -0.05 && y < 0.42;',
+    '    bool head = y >= -0.42 && y <= -0.02 && x < (y + 0.42) * 0.95;',
+    '    if (!stem && !head) discard;',
+    '    gl_FragColor = vec4(1.0, 1.0, 1.0, uAlpha);',
+    '    return;',
+    '  }',
     '  vec3 N = normalize(vNormal);',
     '  vec3 V = normalize(uCamPos - vWorld);',
 
@@ -281,6 +290,7 @@
       this.shake = 0;
       this.shakeT = 0;
       this.eye = [0, 0, 7];
+      this.up = [0, 1, 0];
       this.target = [0, 0, 0];
 
       this.proj = m4.create();
@@ -347,6 +357,8 @@
         ez += (Math.random() - 0.5) * s;
       }
       this.eye = [ex, ey, ez];
+      // 上方向随轨道一起转，越过顶底时不会与视线平行或突然翻转。
+      this.up = [-sp * Math.sin(this.yaw), cp, -sp * Math.cos(this.yaw)];
     }
 
     addShake(v) { this.shake = Math.max(this.shake, v); this.shakeT = 1; }
@@ -354,7 +366,7 @@
     beginFrame() {
       const gl = this.gl;
       m4.perspective(this.proj, this.fov, this.aspect, 0.3, 60);
-      m4.lookAt(this.view, this.eye, this.target, [0, 1, 0]);
+      m4.lookAt(this.view, this.eye, this.target, this.up);
       m4.multiply(this.vp, this.proj, this.view);
       m4.invert(this.invVP, this.vp);
 
@@ -394,6 +406,14 @@
       gl.uniform1f(L.uAlpha, alpha);
       gl.depthMask(alpha > 0.985);
       gl.drawElements(gl.TRIANGLES, this.boxCount, gl.UNSIGNED_SHORT, 0);
+    }
+
+    drawDirectionArrows(board) {
+      board.faces.forEach((face, f) => {
+        const center = face.n.map((n, a) => n * (board.h + 0.012) - face.d[a] * 0.55);
+        m4.fromBasisScale(this.tmpM, board.faceBasis(f), center, [0.28, 0.30, 0.006]);
+        this.drawBox(this.tmpM, [1, 1, 1], [-1, 0], 0, 1);
+      });
     }
 
     drawParticles() {

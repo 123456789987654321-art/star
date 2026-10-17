@@ -13,7 +13,7 @@ function bounds(t) {
   const half = [0, 1, 2].map(a => t.size.reduce((s, v, k) => s + Math.abs(t.basis[k * 3 + a]) * v / 2, 0));
   return { min: t.center.map((v, a) => v - half[a]), max: t.center.map((v, a) => v + half[a]) };
 }
-for (const N of [4, 5, 6, 7]) {
+for (const N of [4, 5, 6, 7, 8, 9, 10]) {
   test(`N=${N}: shell consists of equal cubes, with shared edge and corner blocks`, () => {
     App.board = new Board(N);
     assert.equal(App.board.size, N ** 3 - (N - 2) ** 3);
@@ -87,4 +87,53 @@ test('gravity preserves blocks and keeps all destination cubes on the hollow she
     assert.ok(tile.size.every(v => Math.abs(v - 0.4) < 1e-8));
   }
   assert.equal(b.applyGravity().length, 0);
+});
+
+test('six face arrows point in the same world direction as falling blocks', () => {
+  const b = new Board(5);
+  const scene = Object.create(Scene.prototype);
+  scene.tmpM = context.MX.m4.create();
+  const models = [];
+  scene.drawBox = model => models.push(Array.from(model));
+  scene.drawDirectionArrows(b);
+  assert.equal(models.length, 6);
+  models.forEach((m, f) => {
+    const direction = b.faces[f].d;
+    const length = Math.hypot(m[4], m[5], m[6]);
+    for (let a = 0; a < 3; a++) assert.ok(Math.abs(-m[4 + a] / length - direction[a]) < 1e-6);
+    const n = b.faces[f].n;
+    assert.ok(m[12] * n[0] + m[13] * n[1] + m[14] * n[2] > 1);
+  });
+});
+
+test('each level adds a grid cell per edge from five to ten, then stays capped', () => {
+  for (const mode of ['normal', 'challenge']) {
+    assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 20].map(level => App.cubeSizeFor(mode, level)), [5, 6, 7, 8, 9, 10, 10, 10]);
+  }
+});
+
+test('unmatchable leftovers explode into fireworks without granting elimination points', () => {
+  const b = new Board(5);
+  const ids = [b.id(4, 0, 0), b.id(4, 4, 4), b.id(5, 2, 2)];
+  ids.forEach((id, i) => { b.color[id] = i; });
+  assert.equal(b.hasMoves(), false);
+  App.board = b;
+  App.spawnTilesInstant();
+  App.score = 100;
+  App.dying = [];
+  App.trackBest = App.updateHud = App.clearHover = () => {};
+  context.Sfx = { levelClear() {} };
+  const bursts = [];
+  App.scene = { addShake() {}, particles: { spawn() {}, burst: (...args) => bursts.push(args) } };
+  App.levelClear();
+  assert.equal(App.levelRemain, 3);
+  assert.equal(App.score, 100 + App.levelScoreBonus);
+  assert.equal(App.tiles.filter(Boolean).length, 0);
+  assert.equal(App.dying.length, 3);
+  for (let i = 0; i < 150; i++) App.updateAnimations(1 / 60);
+  assert.equal(App.dying.length, 0);
+  assert.equal(bursts.length, 3);
+  assert.equal(App.board.aliveCount(), 3, 'settlement retains the original leftover count');
+  assert.equal(App.score, 100 + App.levelScoreBonus);
+  assert.ok(App.timer.t >= 2, 'settlement waits for the fireworks');
 });

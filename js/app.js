@@ -29,6 +29,7 @@
     mode: 'normal',
     level: 1,
     N: 5,
+    zoom: 0,
     score: 0,
     target: 0,
     timeLeft: 0,
@@ -84,7 +85,10 @@
       };
       this.last = performance.now();
       requestAnimationFrame(loop);
-      window.addEventListener('resize', () => this.scene.resize());
+      window.addEventListener('resize', () => {
+        this.scene.resize();
+        if (this.state !== 'menu') this.setZoom(this.zoom);
+      });
       // 样式表如果加载得比脚本晚，首帧的 clientWidth 会是 canvas 默认尺寸，重新量一次
       window.addEventListener('load', () => this.scene.resize());
     },
@@ -128,8 +132,7 @@
 
     /* ---------- 关卡参数 ---------- */
     cubeSizeFor(mode, level) {
-      if (mode === 'normal') return 5;
-      return clamp(4 + Math.floor((level - 1) / 2), 4, 7);
+      return clamp(level + 4, 5, 10);
     },
     targetFor(level, tiles) {
       // 沿用每块的目标分比例，按实际外壳块数缩放。
@@ -242,7 +245,7 @@
         this.scene.yaw += dt * 0.24;
         this.scene.pitch = 0.30 + Math.sin(this.clock * 0.42) * 0.16;
       }
-      this.scene.dist = clamp(this.scene.dist, this.scene.fitDist * 0.6, this.scene.fitDist * 1.9);
+      if (this.state === 'menu') this.scene.dist = clamp(this.scene.dist, this.scene.fitDist * 0.6, this.scene.fitDist * 1.9);
 
       this.updateAnimations(dt);
       this.updateTimers(dt);
@@ -302,12 +305,20 @@
         const t = this.dying[i];
         const a = t.anim;
         a.t += dt;
-        const p = clamp(a.t / a.dur, 0, 1);
+        const elapsed = a.t - (a.delay || 0);
+        if (elapsed < 0) continue;
+        const p = clamp(elapsed / a.dur, 0, 1);
         t.center = [
           a.from[0] + a.vel[0] * p * a.dur * 0.5,
           a.from[1] + a.vel[1] * p * a.dur * 0.5 - 1.6 * p * p,
           a.from[2] + a.vel[2] * p * a.dur * 0.5
         ];
+        if (a.firework && !a.exploded && elapsed >= 0.28) {
+          a.exploded = true;
+          this.scene.particles.burst(t.center, PALETTE[t.color].rgb, a.sparks, {
+            speed: 2.8, size: 0.075, life: 1.25, gravity: 1.2, drag: 0.65
+          });
+        }
         m3.rotateBasis(m3.fromAxisAngle(a.spinAxis[0], a.spinAxis[1], a.spinAxis[2], a.spin0 * p), t.homeBasis, t.basis);
         const s = p < 0.16 ? 1 + p / 0.16 * 0.28 : 1.28 * Math.pow(1 - (p - 0.16) / 0.84, 1.5);
         t.scaleMul = s;
@@ -431,12 +442,31 @@
         const t = list[i];
         if (t.alpha <= 0.985) sc.drawBox(t.model, PALETTE[t.color].rgb, [TILE_BEVEL, TILE_STAR], t.highlight, t.alpha);
       }
+      if (this.board && !['menu', 'intro', 'clear', 'over'].includes(this.state)) sc.drawDirectionArrows(this.board);
       sc.drawParticles();
     },
 
     /* ============================================================
        交互
        ============================================================ */
+    setZoom(value) {
+      this.zoom = clamp(value, 0, 1);
+      this.scene.dist = this.scene.fitDist * 1.25 / (1 + 0.6 * this.zoom);
+      const slider = document.getElementById('zoomSlider');
+      slider.value = String(this.zoom * 100);
+      slider.setAttribute('aria-valuetext', Math.round(100 + 60 * this.zoom) + '%');
+    },
+
+    setZoomFromDistance(distance) {
+      this.setZoom((this.scene.fitDist * 1.25 / Math.max(distance, 0.001) - 1) / 0.6);
+    },
+
+    resetView() {
+      this.scene.yaw = 0.62;
+      this.scene.pitch = 0.42;
+      this.setZoom(0);
+    },
+
     bindInput() {
       const cv = document.getElementById('gl');
       const pts = new Map();
@@ -472,7 +502,7 @@
         if (pts.size >= 2) {
           const a = [...pts.values()];
           const d = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y);
-          if (pinch > 0 && d > 0) this.scene.dist *= pinch / d;
+          if (pinch > 0 && d > 0 && this.state !== 'menu') this.setZoomFromDistance(this.scene.dist * pinch / d);
           pinch = d;
           return;
         }
@@ -484,8 +514,7 @@
           dragging = true;
           this.clearHover();
           this.scene.yaw -= dx * 0.0072;
-          this.scene.pitch = clamp(this.scene.pitch + dy * 0.0062, -1.25, 1.25);
-          this.scene.dist = clamp(this.scene.dist, this.scene.fitDist * 0.6, this.scene.fitDist * 1.9);
+          this.scene.pitch += dy * 0.0062;
         }
       });
 
@@ -504,8 +533,7 @@
 
       cv.addEventListener('wheel', (e) => {
         e.preventDefault();
-        this.scene.dist *= Math.exp(e.deltaY * 0.0011);
-        this.scene.dist = clamp(this.scene.dist, this.scene.fitDist * 0.6, this.scene.fitDist * 1.9);
+        if (this.state !== 'menu') this.setZoomFromDistance(this.scene.dist * Math.exp(e.deltaY * 0.0011));
       }, { passive: false });
 
       window.addEventListener('keydown', (e) => {
@@ -651,6 +679,7 @@
 
     levelClear() {
       this.state = 'clear';
+      this.clearHover();
       const remain = this.board.aliveCount();
       // 传统公式 (2000 - 20r²) 在 6 色下永远是 0（一局结束平均只剩 1/3 的孤块），
       // 这里改成按「剩余占比」给奖励：全清满额，剩到一半就是 0。
@@ -663,6 +692,22 @@
       window.Sfx.levelClear();
       this.scene.addShake(0.6);
 
+      // 剩余孤块只参与收尾烟花，保留棋盘计数用于结算，不追加消除分。
+      const leftovers = this.tiles.filter(Boolean);
+      leftovers.forEach((tile, i) => {
+        tile.anim = {
+          type: 'pop', firework: true, exploded: false,
+          t: 0, delay: i / Math.max(1, leftovers.length) * 0.65, dur: 1.05,
+          from: tile.center.slice(),
+          vel: v3.mul(v3.norm(v3.add(tile.center, [0, 0.8, 0])), 4.2),
+          spinAxis: tile.spinAxis, spin0: 5 + Math.random() * 4,
+          sparks: clamp(Math.floor(1100 / Math.max(1, leftovers.length)), 3, 36)
+        };
+        tile.highlight = 0;
+        this.dying.push(tile);
+        this.tiles[tile.id] = null;
+      });
+
       for (let i = 0; i < 60; i++) {
         const c = PALETTE[(Math.random() * NC) | 0].rgb;
         this.scene.particles.spawn(
@@ -671,13 +716,14 @@
         );
       }
       this.updateHud();
-      this.timer = { t: 0.9, fn: () => this.showClearPanel() };
+      this.timer = { t: 2.5, fn: () => this.showClearPanel() };
     },
 
     showClearPanel() {
       const passed = this.score >= this.target;
       if (!passed) { this.gameOver('分数不足'); return; }
-      const nextTiles = Math.pow(this.cubeSizeFor(this.mode, this.level + 1), 2) * 6;
+      const nextN = this.cubeSizeFor(this.mode, this.level + 1);
+      const nextTiles = nextN ** 3 - (nextN - 2) ** 3;
       this.overlay(`
         <div class="ov-emoji">🎉</div>
         ${this.newRecord ? '<div class="ov-badge">新 纪 录</div>' : ''}
@@ -755,7 +801,7 @@
       this.hideOverlay();
       document.getElementById('menu').classList.add('hidden');
       document.getElementById('hud').classList.remove('hidden');
-      this.scene.dist = this.scene.fitDist * 1.12;
+      this.setZoom(first ? 0 : this.zoom);
       this.scene.yaw = 0.62;
       this.scene.pitch = 0.42;
       this.showBanner();
@@ -824,6 +870,15 @@
        UI
        ============================================================ */
     bindUI() {
+      const zoomSlider = document.getElementById('zoomSlider');
+      zoomSlider.addEventListener('input', () => { this.clearHover(); this.setZoom(Number(zoomSlider.value) / 100); });
+      zoomSlider.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          this.setZoom(this.zoom + (e.key === 'ArrowUp' ? 0.05 : -0.05));
+        }
+      });
+      document.getElementById('btnResetView').addEventListener('click', () => { this.clearHover(); this.resetView(); });
       document.querySelectorAll('.mode-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
           window.Sfx.init(); window.Sfx.resume();
