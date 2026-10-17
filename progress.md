@@ -1,4 +1,4 @@
-Latest scope: main-body perspective pairing in ALL formal and test levels. Unique block IDs; visible depth-picked seams; physical adjacency retained. Main5/test7 unchanged. Global scan skips internal faces and physically shared edges. Review regression retains rotating panel as an occluder.
+Latest revision: rotor levels now exclusively use physical contacts, including body matching and future-move checks. Normal/challenge each have a level picker with persisted cleared levels, locked grey buttons, and a separate continue entry. Replays restore entry scores; test mode excluded from progress. 65 tests and Edge menu clicks, persistence, mobile layout and rotor exclusion passed.
 
 # Progress
 

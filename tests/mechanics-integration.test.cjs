@@ -76,14 +76,31 @@ test('remaining same colors can still be paired from another view instead of end
   a.board.color[a.board.size-1]=3;assert.equal(a.hasPotentialMoves(),false);
 });
 
-test('rotating panel remains an occluder when matching body-only view seams',()=>{
+test('rotating levels disable view seams and do not retain separated body colors as potential matches',()=>{
   const {a,ctx}=fixture();a.state='play';a.rotor=new ctx.Rotor(a.board);
   a.mainMatcher=new ctx.PerspectivePanel(a.board);a.mainMatcher.colors.fill(-1);
   a.scene.vp=[1];a.scene.w=a.scene.h=100;a.scene.dpr=1;
   const panelTile={id:a.board.size};a.renderList=[{id:0},panelTile];
   a.scene.pick=(x,y,tiles)=>tiles.includes(panelTile)?panelTile.id:0;
-  a.mainMatcher.updateProjection=(project,visible,eye,pick)=>{
-    assert.equal(pick([50,50],[0]),panelTile.id,'visible rotor must block the body behind it');
-  };
+  a.mainMatcher.updateProjection=()=>assert.fail('rotor levels must not scan projected seams');
+  a.viewLinks=[[0,a.board.size-1]];
   a.updatePerspectiveContacts();
+  assert.equal(a.viewLinks.length,0);
+  a.rotor.colors.fill(-1);a.board.color[0]=a.board.color[a.board.size-1]=2;
+  assert.equal(a.groupAt(0).length,1);assert.equal(a.hasPotentialMoves(),false);
+});
+
+test('level selection persists separate completed levels and restores entry scores',()=>{
+  const {a,ctx}=fixture();const saved=new Map();
+  ctx.localStorage={getItem:k=>saved.get(k),setItem:(k,v)=>saved.set(k,v)};
+  a.startLevel=()=>{};
+  a.startGame('normal',3);assert.equal(a.level,1,'locked level cannot be entered directly');
+  a.score=900;a.target=500;a.recordClear();
+  assert.equal(a.progressFor('normal').cleared[1],0);
+  assert.equal(Object.keys(a.progressFor('challenge').cleared).length,0);
+  a.startSelectedLevel('normal',2,true);assert.equal(a.level,2);assert.equal(a.score,900);
+  a.score=1800;a.target=1400;a.recordClear();
+  a.startSelectedLevel('normal',2);assert.equal(a.level,2);assert.equal(a.score,900);
+  a.startGame('test',3);a.score=99999;a.target=0;a.recordClear();
+  assert.equal(a.progressFor('normal').next,3);assert.equal(a.progressFor('challenge').next,1);
 });

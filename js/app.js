@@ -172,7 +172,7 @@
       if (!this.rotor && !this.viewLinks.length) return this.board.groupOf(id);
       const c = this.colorAt(id);
       if (c < 0 || this.board.covered[id]) return [];
-      const contacts = (this.rotor ? this.rotor.contacts() : []).concat(this.viewLinks);
+      const contacts = (this.rotor ? this.rotor.contacts() : []).concat(this.rotor&&!this.rotor.projected?[]:this.viewLinks);
       const run = color => {
         const out = [], stack = [id], seen = new Set([id]);
         while (stack.length) {
@@ -188,7 +188,7 @@
     hasPotentialMoves() {
       if (this.board.hasMoves()) return true;
       const colors=new Set();
-      for(const color of this.board.color)if(color>=0) {
+      for(const color of (this.rotor&&!this.rotor.projected?[]:this.board.color))if(color>=0) {
         if(colors.has(color))return true; // A future view can join separated same-color blocks.
         colors.add(color);
       }
@@ -344,6 +344,7 @@
     updatePerspectiveContacts() {
       const sc=this.scene;
       if(!this.board || this.state!=='play')return;
+      if(this.rotor&&!this.rotor.projected) { this.viewLinks=[];this.mainMatcher=null;return; }
       let panel=this.rotor;
       if(!panel || !panel.projected) {
         if(!this.mainMatcher || this.mainMatcher.board!==this.board) {
@@ -538,7 +539,7 @@
         if (rank > bestRank) { best = group; anchor = front >= 0 ? front : group[0]; bestRank = rank; visible = front >= 0; }
       }
       const status = document.getElementById('hintStatus');
-      if (!best) { status.textContent = this.rotor && this.rotor.projected ? '转动视角，让主体之间或固定方板的同色块在画面上接边' : this.rotor ? '当前没有组合，请转动视角配对主体同色块，或等待方板停靠' : '当前没有可以消除的组合，请转动视角，让主体不同位置的同色块在画面上接边'; return; }
+      if (!best) { status.textContent = this.rotor && this.rotor.projected ? '转动视角，让主体之间或固定方板的同色块在画面上接边' : this.rotor ? '当前没有组合，请等待旋转方板实际接触主体后再试' : '当前没有可以消除的组合，请转动视角，让主体不同位置的同色块在画面上接边'; return; }
       this.hintIds = best;
       this.hintTime = 0;
       if (!visible) {
@@ -892,6 +893,7 @@
       const ratio = remain / this.tilesAll;
       const bonus = Math.max(0, Math.round(2200 * (1 - ratio / 0.5) * (this.tilesAll / 150) / 10) * 10);
       this.score += bonus;
+      this.recordClear();
       this.trackBest();
       this.levelScoreBonus = bonus;
       this.levelRemain = remain;
@@ -985,15 +987,49 @@
     /* ============================================================
        流程控制
        ============================================================ */
+    progressFor(mode) {
+      this.progressCache=this.progressCache||{};
+      if(this.progressCache[mode])return this.progressCache[mode];
+      let p=null;
+      try { p=JSON.parse(window.localStorage.getItem('popstar3d.progress.'+mode)); } catch(e) {}
+      if(!p||!Number.isSafeInteger(p.next)||p.next<1||!Number.isFinite(p.score)||p.score<0||!p.cleared||typeof p.cleared!=='object')p={next:1,score:0,cleared:{}};
+      return this.progressCache[mode]=p;
+    },
+    recordClear() {
+      if(!['normal','challenge'].includes(this.mode)||this.score<this.target)return;
+      const p=this.progressFor(this.mode);
+      if(!Object.prototype.hasOwnProperty.call(p.cleared,this.level))p.cleared[this.level]=this.entryScore||0;
+      if(this.level>=p.next) {p.next=this.level+1;p.score=this.score;}
+      try {window.localStorage.setItem('popstar3d.progress.'+this.mode,JSON.stringify(p));}catch(e) {}
+    },
+    showLevelSelect(mode) {
+      this.selectMode=mode;
+      const p=this.progressFor(mode),count=Math.max(12,p.next+3);
+      let buttons='';
+      for(let level=1;level<=count;level++) {
+        const cleared=Object.prototype.hasOwnProperty.call(p.cleared,level);
+        buttons+=`<button class="level-choice ${cleared?'passed':'locked'}" ${cleared?`data-act="selectLevel" data-level="${level}"`:'disabled'} aria-label="第 ${level} 关，${cleared?'已通关':'未通关，锁定'}">${level}<small>${cleared?'已通关':'🔒'}</small></button>`;
+      }
+      this.overlay(`<h2 class="ov-title">${mode==='normal'?'普通模式':'挑战模式'} · 选关</h2><p class="ov-sub">彩色关卡可重玩 · 灰色关卡尚未通关</p><div class="level-grid">${buttons}</div><div class="ov-actions"><button class="ov-btn" data-act="continueLevels">${p.next===1?'开始闯关':'继续闯关'} · 第 ${p.next} 关</button><button class="ov-btn plain" data-act="helpClose">返回菜单</button></div>`);
+    },
+    startSelectedLevel(mode,level,continuing=false) {
+      const p=this.progressFor(mode);
+      if(!Number.isSafeInteger(level)||!(Object.prototype.hasOwnProperty.call(p.cleared,level)||(continuing&&level===p.next)))return;
+      this.mode=mode;this.level=level;
+      this.score=continuing?p.score:p.cleared[level];
+      this.entryScore=this.score;this.newRecord=false;this.startLevel(true);
+    },
     startGame(mode, testLevel = 1) {
       this.mode = mode;
       this.level = mode === 'test' ? clamp(Math.round(testLevel), 1, 3) : 1;
       this.score = 0;
+      this.entryScore=0;
       this.newRecord = false;
       this.startLevel(true);
     },
 
     startLevel(first) {
+      this.entryScore=this.score;
       this.clearHint();
       const N = this.cubeSizeFor(this.mode, this.level);
       this.N = N;
@@ -1038,7 +1074,7 @@
       b.classList.add('show');
     },
 
-    restart() { this.startGame(this.mode, this.level); },
+    restart() { this.score=this.entryScore||0;this.newRecord=false;this.startLevel(true); },
 
     toMenu() {
       this.clearHint();
@@ -1112,7 +1148,7 @@
       document.querySelectorAll('.mode-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
           window.Sfx.init(); window.Sfx.resume();
-          this.startGame(btn.dataset.mode);
+          this.showLevelSelect(btn.dataset.mode);
         });
       });
       document.getElementById('btnHowto').addEventListener('click', () => this.showHelp(true));
@@ -1128,9 +1164,12 @@
 
       const ov = document.getElementById('overlay');
       ov.addEventListener('click', (e) => {
-        const act = e.target.dataset ? e.target.dataset.act : null;
+        const button=e.target.closest('[data-act]');
+        const act = button ? button.dataset.act : null;
         if (!act) return;
-        if (act === 'next') {
+        if(act==='selectLevel')this.startSelectedLevel(this.selectMode,Number(button.dataset.level));
+        else if(act==='continueLevels')this.startSelectedLevel(this.selectMode,this.progressFor(this.selectMode).next,true);
+        else if (act === 'next') {
           this.level++;
           this.startLevel(false);
         } else if (act === 'retry') this.restart();
@@ -1159,7 +1198,7 @@
           <ul>
             <li>点一下<em>连在一起的同色方块</em>（至少 2 块）即可消除，得分 <em>5 × 块数²</em>。</li>
             <li>连在一起是指<em>贴着的一格之内</em>：同一面上下左右相邻，或者<em>翻过棱边</em>的相邻方块。</li>
-            <li>所有关卡都支持<em>主体视角配对</em>：转动视角后，不同面的同色块在画面中形成可见接边，也可以点击一起消除。露出多个面的同一方块只计一块。</li>
+            <li>普通消除与视角拼接关支持<em>主体视角配对</em>：转动视角后，同色块在画面中形成可见接边，即可点击一起消除。同一方块只计一块。<em>旋转方板关只按实际相邻或接触判断</em>，不使用视角配对。</li>
           </ul>
           <h4>消完怎么掉</h4>
           <ul>

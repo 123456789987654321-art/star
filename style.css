@@ -354,6 +354,12 @@ canvas#gl {
 }
 .ov-btn.plain:hover { background: rgba(255,255,255,.12); }
 
+.level-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; max-height: 42vh; overflow-y: auto; padding: 4px; margin-bottom: 20px; }
+.level-choice { min-height: 64px; border: 1px solid #708ad3; border-radius: 12px; font-family: inherit; font-size: 20px; font-weight: 700; color: white; background: linear-gradient(135deg,#3469ca,#8152be); cursor: pointer; }
+.level-choice small { display: block; margin-top: 4px; font-size: 11px; }
+.level-choice.locked { background: #343844; color: #aeb3c0; border-color: #515663; cursor: not-allowed; }
+.level-choice.passed:hover { filter: brightness(1.18); }
+.level-choice:focus-visible { outline: 3px solid #ffd76a; outline-offset: 2px; }
 .ov-help { text-align: left; font-size: 13.5px; line-height: 1.75; color: #c4cff0; }
 .ov-help h4 { margin: 16px 0 7px; font-size: 13px; letter-spacing: .16em; color: #8fa4d8; font-weight: 600; }
 .ov-help h4:first-child { margin-top: 0; }
