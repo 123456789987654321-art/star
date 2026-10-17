@@ -3,7 +3,7 @@
   'use strict';
   const profiles = {
     1: { size: 5, kind: 'normal', title: '经典消除' },
-    2: { size: 5, kind: 'coating', title: '黑膜谜块' },
+    2: { size: 5, kind: 'normal', title: '经典消除' },
     3: { size: 5, kind: 'rotor', title: '旋转方板' },
     4: { size: 5, kind: 'tunnel', title: '十字通道' }
   };

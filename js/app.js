@@ -981,11 +981,6 @@
       const profile = window.LevelProfile(this.level);
       this.tunnel = profile.kind === 'tunnel' ? new window.CrossTunnel(this.board) : null;
       this.rotor = profile.kind === 'rotor' ? new window.Rotor(this.board) : null;
-      if (profile.kind === 'coating') {
-        const coated = [];
-        for (let id = 0; id < this.board.size; id++) if (Math.random() < 0.28) coated.push(id);
-        this.board.coat(coated);
-      }
       this.tilesAll = this.board.size;
       this.target = this.targetFor(this.level, this.board.size);
       this.dying.length = 0;
@@ -1155,7 +1150,7 @@
           </ul>
           <h4>机关关卡（均为 5×5）</h4>
           <ul>
-            <li>第 2 关：黑色问号膜遮住颜色。沿白箭头反方向，先清掉上方方块，揭膜后才能消除。</li>
+            <li>第 1、2 关：普通 5×5 消除，目标分逐关增加。</li>
             <li>第 3 关：2×3 旋转方板。接触主体时，同色方块可以连成一组，仍需点击消除。</li>
             <li>第 4 关：先消掉前方方块露出十字通道，点击金色挡板。转动立方体，让灰色问号块沿屏幕下方移动；出口空着时进入表面，可与任一颜色组合。</li>
           </ul>

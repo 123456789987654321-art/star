@@ -5,6 +5,8 @@
 - Last published commit: 188f039 (camera-relative orbit).
 # Completion update
 
+- User cancelled black coating: removed its level assignment and creation path; level 2 is ordinary 5x5. Rotor and tunnel stay in levels 3 and 4.
+
 - Latest difficulty order and arrow-down reticle implemented.
 - 45/45 tests passed, including rotor group removal and tunnel arrival into surface gravity.
 - Edge checks: six-face reticle, coating render, rotor motion/contact, gate mouse click, wildcard exit; GL error 0, no runtime errors.

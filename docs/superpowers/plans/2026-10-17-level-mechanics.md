@@ -1,5 +1,7 @@
 # Level mechanics implementation plan
 
+Superseding revision: black coating cancelled by user. Level 2 is now ordinary 5x5; rotor stays level 3, tunnel stays level 4. Earlier coating requirements below are historical.
+
 Goal: Add coatings, a rotating 2x3 panel and a four-exit cross tunnel. Latest user request orders them by difficulty: level 2 coating, level 3 rotor, level 4 tunnel. Levels 1–4 remain 5x5; maximum supported progression is 8x8. Later size progression remains unspecified, so unconfigured levels retain 5x5.
 
 Architecture: Board owns wildcard matching and coated-piece state. A new LevelMechanics module owns explicit level profiles and tunnel movement. App coordinates transitions, render/picking and interaction; Scene renders markings and tunnel geometry.
