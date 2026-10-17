@@ -1,0 +1,25 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const fs = require('node:fs');
+const path = require('node:path');
+const ctx = vm.createContext({ document: { readyState: 'loading', addEventListener() {} } });
+ctx.window = ctx;
+for (const file of ['mathx', 'board', 'mechanics', 'app']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../js', file + '.js'), 'utf8'), ctx);
+test('定位键将六个面的箭头分别转向屏幕下方，保留缩放', () => {
+  const a = ctx.App; a.board = new ctx.Board(5); a.zoom = 0.7;
+  for (const f of a.board.faces) {
+    a.scene = { orbit: { back: f.n.slice(), up: f.r.slice() }, dist: 6 };
+    a.alignCurrentFace();
+    assert.deepEqual(Array.from(a.scene.orbit.back), Array.from(f.n));
+    assert.equal(a.scene.orbit.up.reduce((s, v, i) => s + v * f.d[i], 0), -1);
+    assert.equal(a.zoom, 0.7); assert.equal(a.scene.dist, 6);
+  }
+});
+test('机关按黑膜、旋转方板、十字通道排序，目标分逐关增加', () => {
+  assert.deepEqual([1,2,3,4].map(n => ctx.LevelProfile(n).kind), ['normal','coating','rotor','tunnel']);
+  for (let n = 1; n <= 4; n++) {
+    assert.equal(ctx.LevelProfile(n).size, 5);
+    assert.ok(ctx.App.targetFor(n + 1, 98) > ctx.App.targetFor(n, 98));
+  }
+});

@@ -19,11 +19,11 @@
     <div class="menu-btns">
       <button class="mode-btn m-normal" data-mode="normal">
         <span class="mb-name">普通模式</span>
-        <span class="mb-desc">经典节奏 · 5×5 逐关增至 10×10</span>
+        <span class="mb-desc">经典节奏 · 5×5 机关闯关</span>
       </button>
       <button class="mode-btn m-challenge" data-mode="challenge">
         <span class="mb-name">挑战模式</span>
-        <span class="mb-desc">限时闯关 · 5×5 逐关增至 10×10</span>
+        <span class="mb-desc">限时闯关 · 5×5 机关挑战</span>
       </button>
     </div>
     <div class="best-line">最高分 <b id="menuBest">0</b></div>
@@ -50,7 +50,7 @@
     </div>
   </div>
   <div class="zoom-control" role="group" aria-label="视角缩放">
-    <button id="btnResetView" class="zoom-reset" type="button" aria-label="恢复初始视角和大小" title="恢复初始视角和大小">
+    <button id="btnResetView" class="zoom-reset" type="button" aria-label="转正当前面，让箭头朝下" title="转正当前面，让箭头朝下（保留缩放）">
       <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
         <circle cx="16" cy="16" r="10"/><circle cx="16" cy="16" r="4"/>
         <path d="M16 2v6m0 16v6M2 16h6m16 0h6"/>
@@ -88,6 +88,7 @@
 
 <script src="js/mathx.js"></script>
 <script src="js/board.js"></script>
+<script src="js/mechanics.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/scene.js"></script>
 <script src="js/app.js"></script>

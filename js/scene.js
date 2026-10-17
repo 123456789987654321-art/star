@@ -40,6 +40,7 @@
     'uniform vec2 uFlags;',     // x: 圆角/边缘强度, y: 星形强度
     'uniform float uHighlight;',
     'uniform float uHint;',
+    'uniform float uMark;',
     'uniform float uAlpha;',
 
     'float starR(float ang){',
@@ -87,6 +88,14 @@
     '  col += vec3(1.0) * spec * 0.22;',
     '  col += uHighlight * vec3(0.45, 0.42, 0.20);',            // 悬停高亮呼吸
     '  col = mix(col, vec3(1.0), uHint);',
+    '  if (uMark > 0.5) {',
+    '    vec2 q = vUV - vec2(0.0, 0.16);',
+    '    float ring = abs(length(q) - 0.16);',
+    '    bool arc = ring < 0.035 && (q.y > 0.0 || q.x > 0.03);',
+    '    bool stem = abs(vUV.x) < 0.035 && vUV.y > -0.17 && vUV.y < 0.05;',
+    '    bool dot = length(vUV - vec2(0.0, -0.29)) < 0.045;',
+    '    if (arc || stem || dot) col = vec3(1.0);',
+    '  }',
     '  gl_FragColor = vec4(col, uAlpha);',
     '}'
   ].join('\n');
@@ -274,7 +283,7 @@
       this.progTile = makeProgram(gl, TILE_VS, TILE_FS);
       this.tileLoc = this._locs(this.progTile, [
         'aPos', 'aNormal', 'aUV', 'aOut', 'uProj', 'uView', 'uModel',
-        'uColor', 'uCamPos', 'uFlags', 'uHighlight', 'uHint', 'uAlpha'
+        'uColor', 'uCamPos', 'uFlags', 'uHighlight', 'uHint', 'uMark', 'uAlpha'
       ]);
 
       this.progPt = makeProgram(gl, PT_VS, PT_FS);
@@ -425,13 +434,14 @@
     }
 
     /** 画一个方块（用盒子几何 + 模型矩阵） */
-    drawBox(model, color, flags, highlight, alpha, hint = 0) {
+    drawBox(model, color, flags, highlight, alpha, hint = 0, mark = 0) {
       const gl = this.gl, L = this.tileLoc;
       gl.uniformMatrix4fv(L.uModel, false, model);
       gl.uniform3fv(L.uColor, color);
       gl.uniform2f(L.uFlags, flags[0], flags[1]);
       gl.uniform1f(L.uHighlight, highlight);
       gl.uniform1f(L.uHint, hint);
+      gl.uniform1f(L.uMark, mark);
       gl.uniform1f(L.uAlpha, alpha);
       gl.depthMask(alpha > 0.985);
       gl.drawElements(gl.TRIANGLES, this.boxCount, gl.UNSIGNED_SHORT, 0);

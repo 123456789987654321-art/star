@@ -12,9 +12,10 @@
     { name: '绿', rgb: [0.20, 0.85, 0.50] },
     { name: '蓝', rgb: [0.22, 0.58, 1.00] },
     { name: '黄', rgb: [1.00, 0.80, 0.22] },
-    { name: '粉', rgb: [1.00, 0.44, 0.79] }
+    { name: '粉', rgb: [1.00, 0.44, 0.79] },
+    { name: '万能', rgb: [0.48, 0.52, 0.60] }
   ];
-  const NC = PALETTE.length;
+  const NC = 6;
   const TILE_BEVEL = 1.0, TILE_STAR = 1.0;
 
   /* 星级：按第一关目标的倍数走，这样不同尺寸的立方体都合适 */
@@ -35,6 +36,8 @@
     timeLeft: 0,
     tilesAll: 0,
     board: null,
+    tunnel: null,
+    rotor: null,
     scene: null,
     tiles: null,          // 按格 id 索引
     dying: [],            // 正在消散的方块
@@ -136,7 +139,7 @@
 
     /* ---------- 关卡参数 ---------- */
     cubeSizeFor(mode, level) {
-      return clamp(level + 4, 5, 10);
+      return window.LevelProfile(level).size;
     },
     targetFor(level, tiles) {
       // 沿用每块的目标分比例，按实际外壳块数缩放。
@@ -154,6 +157,65 @@
     /* ============================================================
        方块 / 棋盘
        ============================================================ */
+    colorAt(id) { return id < this.board.size ? this.board.colorOf(id) : this.rotor ? this.rotor.colors[id - this.board.size] : -1; },
+    remainingCount() { return this.board.aliveCount() + (this.tunnel ? this.tunnel.remaining() : 0) + (this.rotor ? this.rotor.remaining() : 0); },
+    groupAt(id) {
+      if (!this.rotor) return this.board.groupOf(id);
+      const c = this.colorAt(id);
+      if (c < 0 || this.board.covered[id]) return [];
+      const contacts = this.rotor.contacts();
+      const run = color => {
+        const out = [], stack = [id], seen = new Set([id]);
+        while (stack.length) {
+          const cur = stack.pop(); out.push(cur);
+          const neighbors = cur < this.board.size ? this.board.neighbors(cur) : this.rotor.neighbors(cur - this.board.size).map(i => i + this.board.size);
+          contacts.forEach(([a, b]) => { if (a === cur) neighbors.push(b); else if (b === cur) neighbors.push(a); });
+          for (const next of neighbors) if (!seen.has(next) && !this.board.covered[next] && (this.colorAt(next) === color || this.colorAt(next) === 6)) { seen.add(next); stack.push(next); }
+        }
+        return out;
+      };
+      return c === 6 ? Array.from({ length: 6 }, (_, color) => run(color)).sort((a, b) => b.length - a.length)[0] : run(c);
+    },
+    hasPotentialMoves() {
+      if (this.board.hasMoves()) return true;
+      if (this.tunnel && this.tunnel.remaining()) {
+        if ([[-2, 0], [2, 0], [0, -2], [0, 2]].some(p => this.board.color[this.tunnel.exitId(...p)] < 0)) return true;
+      }
+      if (this.rotor && this.rotor.remaining()) {
+        const saved = this.rotor.angle;
+        let possible = false;
+        for (let step = 0; step < 48 && !possible; step++) {
+          this.rotor.angle = step * Math.PI / 24;
+          for (let i = 0; i < 6; i++) if (this.rotor.colors[i] >= 0 && this.groupAt(this.board.size + i).length >= 2) { possible = true; break; }
+        }
+        this.rotor.angle = saved;
+        return possible;
+      }
+      return false;
+    },
+    updateMechanics(dt) {
+      if (this.rotor && ['play', 'busy', 'intro'].includes(this.state)) {
+        this.rotor.update(dt);
+        for (let i = 0; i < 6; i++) {
+          const tile = this.tiles[this.board.size + i];
+          if (!tile) continue;
+          tile.center = this.rotor.center(i); tile.basis = this.rotor.basis(); tile.homeBasis = tile.basis.slice();
+        }
+        const signature = JSON.stringify(this.rotor.contacts());
+        if (this.rotorContactKey !== signature) {
+          this.rotorContactKey = signature; this.clearHover();
+          if (this.hintIds && this.hintIds.some(id => id >= this.board.size)) this.clearHint();
+        }
+      }
+      if (this.tunnel && this.state === 'play') {
+        const arrivals = this.tunnel.update(dt, this.scene.up.map(v => -v));
+        if (arrivals.length) {
+          this.clearHint(); this.clearHover();
+          arrivals.forEach(({ id }) => { this.tiles[id] = this.makeTile(id, 6); });
+          this.settle();
+        }
+      }
+    },
     tileGeom() {
       const p = this.board.pitch;
       return { size: [p, p, p] };
@@ -194,7 +256,7 @@
     spawnTilesInstant() {
       const b = this.board;
       this.tiles = new Array(b.size).fill(null);
-      this.tilesAll = b.size;
+      this.tilesAll = b.size + (this.tunnel ? 2 : this.rotor ? 6 : 0);
       for (let id = 0; id < b.size; id++) {
         if (b.color[id] >= 0) this.tiles[id] = this.makeTile(id, b.color[id]);
       }
@@ -208,7 +270,7 @@
       const waveOf = { 5: 0, 0: 1, 1: 1, 2: 1, 3: 1, 4: 2 };
 
       this.tiles = new Array(b.size).fill(null);
-      this.tilesAll = b.size;
+      this.tilesAll = b.size + (this.tunnel ? 2 : this.rotor ? 6 : 0);
       this.dying.length = 0;
 
       for (let id = 0; id < b.size; id++) {
@@ -259,6 +321,7 @@
       this.updateHint(dt);
       this.scene.particles.update(dt);
       this.scene.updateCamera(dt);
+      this.updateMechanics(dt);
 
       this.buildRenderList();
       this.render();
@@ -411,9 +474,9 @@
       this.clearHover();
       const seen = new Set();
       let best = null, anchor = -1, bestRank = -1, visible = false;
-      for (let id = 0; id < this.board.size; id++) {
-        if (seen.has(id) || this.board.colorOf(id) < 0) continue;
-        const group = this.board.groupOf(id);
+      for (let id = 0; id < this.board.size + (this.rotor ? 6 : 0); id++) {
+        if (seen.has(id) || this.colorAt(id) < 0) continue;
+        const group = this.groupAt(id);
         group.forEach(member => seen.add(member));
         if (group.length < 2) continue;
         let front = -1;
@@ -429,7 +492,7 @@
         if (rank > bestRank) { best = group; anchor = front >= 0 ? front : group[0]; bestRank = rank; visible = front >= 0; }
       }
       const status = document.getElementById('hintStatus');
-      if (!best) { status.textContent = '当前没有可以消除的方块'; return; }
+      if (!best) { status.textContent = this.tunnel ? '清出通道出口，点击金色挡板，再转动立方体引导灰色问号块' : this.rotor ? '暂时没有组合，等待旋转方板接触主体后再试' : '当前没有可以消除的方块'; return; }
       this.hintIds = best;
       this.hintTime = 0;
       if (!visible) {
@@ -492,7 +555,7 @@
         t.size[0] = t.baseSize[0] * s;
         t.size[1] = t.baseSize[1] * s;
         t.size[2] = t.baseSize[2] * s;
-        const normal = this.board.faces[this.board.faceOf(t.id)].n;
+        const normal = t.external ? [1, 0, 0] : this.board.faces[this.board.faceOf(t.id)].n;
         t.renderCenter = t.center.map((v, a) => v + normal[a] * (t.hintLift || 0));
         m4.fromBasisScale(t.model, t.basis, t.renderCenter, t.size);
         const k = 1 - 0.30 * t.squash;
@@ -501,6 +564,26 @@
       };
       if (this.tiles) for (let i = 0; i < this.tiles.length; i++) if (this.tiles[i]) add(this.tiles[i]);
       for (let i = 0; i < this.dying.length; i++) add(this.dying[i]);
+      if (this.tunnel && ['play', 'busy', 'intro', 'paused'].includes(this.state)) {
+        const box = (id, center, size, rgb, mark = 0) => {
+          const basis = [1,0,0,0,1,0,0,0,1], model = m4.create();
+          m4.fromBasisScale(model, basis, center, size);
+          list.push({ id, center, size, basis, model, rgb, mark, special: true, alpha: 1, highlight: 0 });
+        };
+        const metal = [0.18,0.34,0.46];
+        box(-10, [0,0,-0.23], [1.65,0.44,0.04], metal);
+        box(-10, [0,0,-0.23], [0.44,1.65,0.04], metal);
+        for (const sign of [-1,1]) for (const side of [-1,1]) {
+          box(-10, [sign*0.52,side*0.23,0], [0.60,0.035,0.44], metal);
+          box(-10, [side*0.23,sign*0.52,0], [0.035,0.60,0.44], metal);
+        }
+        this.tunnel.gates.forEach((gate, i) => {
+          if (gate.progress < 1) box(-100-i, i ? [0,0.2-gate.progress*0.6,0] : [-0.2,-gate.progress*0.6,0], i ? [0.40,0.05,0.40] : [0.05,0.40,0.40], [0.95,0.64,0.18]);
+        });
+        this.tunnel.pieces.forEach((piece, i) => {
+          if (!piece.exited) box(-200-i, [piece.position[0]*this.board.pitch,piece.position[1]*this.board.pitch,0], [0.36,0.36,0.36], PALETTE[6].rgb, 1);
+        });
+      }
     },
 
     render() {
@@ -508,13 +591,19 @@
       sc.beginFrame();
       // 只绘制彩色方块外壳；消除后的空洞直接露出内部。
       const list = this.renderList;
+      const draw = t => {
+        const covered = !t.special && !t.external && this.board.covered[t.id];
+        const mark = t.special ? t.mark : (covered || t.color === 6 ? 1 : 0);
+        const rgb = covered ? [0.035,0.04,0.055] : (t.rgb || PALETTE[t.color].rgb);
+        sc.drawBox(t.model, rgb, [TILE_BEVEL, mark || t.special ? 0 : TILE_STAR], t.highlight, t.alpha, t.hintGlow || 0, mark);
+      };
       for (let i = 0; i < list.length; i++) {
         const t = list[i];
-        if (t.alpha > 0.985) sc.drawBox(t.model, PALETTE[t.color].rgb, [TILE_BEVEL, TILE_STAR], t.highlight, 1, t.hintGlow);
+        if (t.alpha > 0.985) draw(t);
       }
       for (let i = 0; i < list.length; i++) {
         const t = list[i];
-        if (t.alpha <= 0.985) sc.drawBox(t.model, PALETTE[t.color].rgb, [TILE_BEVEL, TILE_STAR], t.highlight, t.alpha);
+        if (t.alpha <= 0.985) draw(t);
       }
       if (this.board && !['menu', 'intro', 'clear', 'over'].includes(this.state)) sc.drawDirectionArrows(this.board);
       sc.drawParticles();
@@ -541,6 +630,17 @@
       this.scene.yaw = 0.62;
       this.scene.pitch = 0.42;
       this.setZoom(0);
+    },
+
+    alignCurrentFace() {
+      if (!this.board) return;
+      this.hintCamera = null;
+      const sc = this.scene;
+      const back = sc.orbit ? sc.orbit.back : [Math.cos(sc.pitch)*Math.sin(sc.yaw), Math.sin(sc.pitch), Math.cos(sc.pitch)*Math.cos(sc.yaw)];
+      const face = this.board.faces.reduce((best, f) => v3.dot(f.n, back) > v3.dot(best.n, back) ? f : best);
+      sc.orbit = { back: face.n.slice(), up: face.d.map(v => -v) };
+      sc.yaw = Math.atan2(face.n[0], face.n[2]);
+      sc.pitch = Math.asin(face.n[1]);
     },
 
     bindInput() {
@@ -632,7 +732,7 @@
       if (prev && prev.length && prev[0] === id) return;
       this.clearHover();
       if (id < 0) return;
-      const grp = this.board.groupOf(id);
+      const grp = this.groupAt(id);
       this.hoverIds = grp.length >= 2 ? grp : null;
       if (!this.hoverIds) {
         const t = this.tiles[id];
@@ -663,8 +763,9 @@
         -((e.clientY / window.innerHeight) * 2 - 1),
         this.renderList
       );
+      if (this.tunnel && (id === -100 || id === -101)) { this.tunnel.openGate(-100 - id); return; }
       if (id < 0) return;
-      const grp = this.board.groupOf(id);
+      const grp = this.groupAt(id);
       if (grp.length < 2) {
         window.Sfx.invalid();
         const t = this.tiles[id];
@@ -711,13 +812,15 @@
         t.highlight = 0;
         this.dying.push(t);
         this.tiles[id] = null;
-        this.board.color[id] = -1;
+        if (t.external) this.rotor.colors[id - this.board.size] = -1;
+        else this.board.remove([id]);
 
         this.scene.particles.burst(t.center, PALETTE[t.color].rgb, n >= 10 ? 12 : 7, {
           speed: 2.4 + n * 0.14, size: 0.078, life: 0.6, gravity: 4.0
         });
       }
       cx /= group.length; cy /= group.length; cz /= group.length;
+      this.board.revealExposed();
       this.toast([cx, cy + 0.55, cz], '+' + gain, n >= 8 ? '' : 'small');
       this.updateHud();
 
@@ -751,14 +854,14 @@
     afterSettle() {
       this.state = 'play';
       this.updateHud();
-      if (!this.board.hasMoves()) this.levelClear();
+      if (!this.hasPotentialMoves()) this.levelClear();
     },
 
     levelClear() {
       this.clearHint();
       this.state = 'clear';
       this.clearHover();
-      const remain = this.board.aliveCount();
+      const remain = this.remainingCount();
       // 传统公式 (2000 - 20r²) 在 6 色下永远是 0（一局结束平均只剩 1/3 的孤块），
       // 这里改成按「剩余占比」给奖励：全清满额，剩到一半就是 0。
       const ratio = remain / this.tilesAll;
@@ -769,6 +872,13 @@
       this.levelRemain = remain;
       window.Sfx.levelClear();
       this.scene.addShake(0.6);
+      if (this.tunnel) this.tunnel.pieces.forEach((piece, i) => {
+        if (piece.exited) return;
+        const tile = this.makeTile(0, 6);
+        tile.id = this.board.size + i; tile.external = true;
+        tile.center = [piece.position[0] * this.board.pitch, piece.position[1] * this.board.pitch, 0];
+        this.tiles[tile.id] = tile;
+      });
 
       // 剩余孤块只参与收尾烟花，保留棋盘计数用于结算，不追加消除分。
       const leftovers = this.tiles.filter(Boolean);
@@ -823,7 +933,7 @@
     gameOver(reason) {
       this.state = 'over';
       window.Sfx.gameOver();
-      const remain = this.board ? this.board.aliveCount() : 0;
+      const remain = this.board ? this.remainingCount() : 0;
       this.overlay(`
         <div class="ov-emoji">💫</div>
         ${this.newRecord ? '<div class="ov-badge">新 纪 录</div>' : ''}
@@ -868,6 +978,14 @@
       this.N = N;
       this.board = new window.Board(N);
       this.board.fillRandom(NC, Math.random);
+      const profile = window.LevelProfile(this.level);
+      this.tunnel = profile.kind === 'tunnel' ? new window.CrossTunnel(this.board) : null;
+      this.rotor = profile.kind === 'rotor' ? new window.Rotor(this.board) : null;
+      if (profile.kind === 'coating') {
+        const coated = [];
+        for (let id = 0; id < this.board.size; id++) if (Math.random() < 0.28) coated.push(id);
+        this.board.coat(coated);
+      }
       this.tilesAll = this.board.size;
       this.target = this.targetFor(this.level, this.board.size);
       this.dying.length = 0;
@@ -877,6 +995,12 @@
       this.lastTickSec = -1;
       this.scene.particles.clear();
       this.spawnTilesFalling(!first);
+      if (this.rotor) for (let i = 0; i < 6; i++) {
+        const tile = this.makeTile(0, this.rotor.colors[i]);
+        tile.id = this.board.size + i; tile.external = true;
+        tile.center = this.rotor.center(i); tile.homeBasis = this.rotor.basis(); tile.basis = tile.homeBasis.slice();
+        this.tiles[tile.id] = tile;
+      }
       this.hideOverlay();
       document.getElementById('menu').classList.add('hidden');
       document.getElementById('hud').classList.remove('hidden');
@@ -891,7 +1015,7 @@
     showBanner() {
       const b = document.getElementById('banner');
       b.innerHTML = '<div class="bn-lv">第 ' + this.level + ' 关</div>' +
-        '<div class="bn-sub">目标 ' + this.target + ' 分' +
+        '<div class="bn-sub">' + window.LevelProfile(this.level).title + ' · 目标 ' + this.target + ' 分' +
         (this.mode === 'challenge' ? ' · 限时' : '') + '</div>';
       b.classList.remove('show');
       void b.offsetWidth;          // 强制重排，让动画能重播
@@ -903,6 +1027,8 @@
     toMenu() {
       this.clearHint();
       this.scene.orbit = null;
+      this.tunnel = null;
+      this.rotor = null;
       this.state = 'menu';
       this.timer = null;
       this.dying.length = 0;
@@ -960,7 +1086,7 @@
           this.setZoom(this.zoom + (e.key === 'ArrowUp' ? 0.05 : -0.05));
         }
       });
-      document.getElementById('btnResetView').addEventListener('click', () => { this.clearHover(); this.resetView(); });
+      document.getElementById('btnResetView').addEventListener('click', () => { this.clearHover(); this.alignCurrentFace(); });
       document.querySelectorAll('.mode-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
           window.Sfx.init(); window.Sfx.resume();
@@ -1025,6 +1151,13 @@
           <h4>操作</h4>
           <ul>
             <li>拖动 = 旋转视角；滚轮 / 双指 = 缩放；点击 = 消除；Esc = 暂停。</li>
+            <li>左下角准星：转正当前面，让白色箭头朝下，保持当前大小。</li>
+          </ul>
+          <h4>机关关卡（均为 5×5）</h4>
+          <ul>
+            <li>第 2 关：黑色问号膜遮住颜色。沿白箭头反方向，先清掉上方方块，揭膜后才能消除。</li>
+            <li>第 3 关：2×3 旋转方板。接触主体时，同色方块可以连成一组，仍需点击消除。</li>
+            <li>第 4 关：先消掉前方方块露出十字通道，点击金色挡板。转动立方体，让灰色问号块沿屏幕下方移动；出口空着时进入表面，可与任一颜色组合。</li>
           </ul>
         </div>
         <div class="ov-actions" style="margin-top:18px">
@@ -1038,7 +1171,7 @@
       $('hudLevel').textContent = this.level;
       $('hudScore').textContent = this.score;
       $('hudTarget').textContent = this.target;
-      $('hudRemain').textContent = this.board ? this.board.aliveCount() : 0;
+      $('hudRemain').textContent = this.board ? this.remainingCount() : 0;
       $('progFill').style.width = clamp((this.score / Math.max(1, this.target)) * 100, 0, 100).toFixed(1) + '%';
 
       const steps = this.starSteps();

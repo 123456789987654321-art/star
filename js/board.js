@@ -28,6 +28,7 @@
       });
       this.size = this.cells.length;
       this.color = new Int8Array(this.size).fill(-1);
+      this.covered = new Uint8Array(this.size);
       this.nbr = this._buildNeighbors();
     }
 
@@ -66,25 +67,56 @@
     colorOf(id) { return this.color[id]; }
     groupOf(id) {
       const c = this.color[id];
-      if (c < 0) return [];
+      if (c < 0 || this.covered[id]) return [];
+      if (c === 6) {
+        let best = [];
+        for (let color = 0; color < 6; color++) {
+          const group = this._groupColor(id, color);
+          if (group.length > best.length) best = group;
+        }
+        return best;
+      }
+      return this._groupColor(id, c);
+    }
+    _groupColor(id, c) {
       const seen = new Uint8Array(this.size), out = [], stack = [id];
       seen[id] = 1;
       while (stack.length) {
         const cur = stack.pop();
         out.push(cur);
         for (const nx of this.nbr[cur]) {
-          if (!seen[nx] && this.color[nx] === c) { seen[nx] = 1; stack.push(nx); }
+          if (!seen[nx] && !this.covered[nx] && (this.color[nx] === c || this.color[nx] === 6)) { seen[nx] = 1; stack.push(nx); }
         }
       }
       return out;
     }
-    hasMoves() { return this.color.some((c, id) => c >= 0 && this.nbr[id].some(nx => this.color[nx] === c)); }
+    hasMoves() {
+      return this.color.some((c, id) => c >= 0 && !this.covered[id] && this.nbr[id].some(nx =>
+        !this.covered[nx] && this.color[nx] >= 0 && (this.color[nx] === c || c === 6 || this.color[nx] === 6)));
+    }
+    coat(ids) {
+      ids.forEach(id => { if (this.color[id] >= 0 && this.color[id] !== 6) this.covered[id] = 1; });
+      this.revealExposed();
+    }
+    revealExposed() {
+      const revealed = [];
+      for (let id = 0; id < this.size; id++) {
+        if (!this.covered[id]) continue;
+        const p = this.cellCenter(id), d = this.faces[this.faceOf(id)].d;
+        const above = this.nbr[id].find(nx => {
+          const q = this.cellCenter(nx);
+          return q.every((v, a) => Math.abs(v - p[a] + d[a] * this.pitch) < 1e-6);
+        });
+        if (above === undefined || this.color[above] < 0) { this.covered[id] = 0; revealed.push(id); }
+      }
+      return revealed;
+    }
     aliveCount() {
       let n = 0;
       for (const c of this.color) if (c >= 0) n++;
       return n;
     }
-    remove(ids) { for (const id of ids) this.color[id] = -1; }
+    remove(ids) { for (const id of ids) { this.color[id] = -1; this.covered[id] = 0; } }
 
     // 每块按所属面的方向滑动，共享棱角只移动一次。
     applyGravity() {
@@ -100,6 +132,8 @@
               const to = this.id(f, write, j);
               this.color[to] = c;
               this.color[from] = -1;
+              this.covered[to] = this.covered[from];
+              this.covered[from] = 0;
               const a = this.cellCenter(from), b = this.cellCenter(to);
               moves.push({ from, to, dist: write - i, dy: b[1] - a[1], dir: b.map((v, axis) => v - a[axis]) });
             }
@@ -107,6 +141,7 @@
           }
         }
       }
+      this.revealExposed();
       return moves;
     }
     fillRandom(colorCount, rnd) {

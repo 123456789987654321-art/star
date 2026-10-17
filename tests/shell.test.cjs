@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const context = vm.createContext({ console, document: { readyState: 'loading', addEventListener() {} } });
 context.window = context;
-for (const file of ['mathx', 'board', 'scene', 'app']) {
+for (const file of ['mathx', 'board', 'mechanics', 'scene', 'app']) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../js', file + '.js'), 'utf8'), context);
 }
 const { App, Board, Scene } = context;
@@ -106,9 +106,9 @@ test('six face arrows point in the same world direction as falling blocks', () =
   });
 });
 
-test('each level adds a grid cell per edge from five to ten, then stays capped', () => {
+test('first four levels and unconfigured later levels remain five by five', () => {
   for (const mode of ['normal', 'challenge']) {
-    assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 20].map(level => App.cubeSizeFor(mode, level)), [5, 6, 7, 8, 9, 10, 10, 10]);
+    assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 20].map(level => App.cubeSizeFor(mode, level)), [5, 5, 5, 5, 5, 5, 5, 5]);
   }
 });
 
