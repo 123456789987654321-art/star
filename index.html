@@ -67,12 +67,18 @@
       <div class="stars" id="hudStars"></div>
     </div>
     <div class="hud-right btns">
+      <button class="icon-btn hint-btn" id="btnHint" title="提示可消除的方块" aria-label="提示可消除的方块">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M8 15c0-2-3-3-3-7a7 7 0 0 1 14 0c0 4-3 5-3 7v2H8zM9 20h6M10 23h4"/></svg>
+        <span>提示</span>
+      </button>
       <button class="icon-btn" id="btnHelp" title="玩法说明">?</button>
       <button class="icon-btn" id="btnSound" title="音效开关">♪</button>
       <button class="icon-btn" id="btnMenu" title="返回菜单">≡</button>
     </div>
   </div>
 </div>
+
+<span id="hintStatus" class="sr-only" role="status" aria-live="polite"></span>
 
 <div id="toasts"></div>
 <div id="tip"></div>

@@ -40,6 +40,9 @@
     dying: [],            // 正在消散的方块
     renderList: [],
     hoverIds: null,
+    hintIds: null,
+    hintTime: 0,
+    hintCamera: null,
     timer: null,          // 一次性延时 { t, fn }
     clock: 0,
     lastTickSec: -1,
@@ -62,6 +65,7 @@
       this.buildSky();
       this.bindUI();
       this.bindInput();
+      this.reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       this.best = this.loadBest();
       this.updateMenuBest();
 
@@ -176,6 +180,8 @@
         model: m4.create(),
         alpha: 1,
         highlight: 0,
+        hintGlow: 0,
+        hintLift: 0,
         scaleMul: 1,
         squash: 0,
         anim: null,
@@ -250,6 +256,7 @@
       this.updateAnimations(dt);
       this.updateTimers(dt);
       this.updateHover(dt);
+      this.updateHint(dt);
       this.scene.particles.update(dt);
       this.scene.updateCamera(dt);
 
@@ -398,6 +405,70 @@
       }
     },
 
+    showHint() {
+      if (this.state !== 'play') return;
+      this.clearHint();
+      this.clearHover();
+      const seen = new Set();
+      let best = null, anchor = -1, bestRank = -1, visible = false;
+      for (let id = 0; id < this.board.size; id++) {
+        if (seen.has(id) || this.board.colorOf(id) < 0) continue;
+        const group = this.board.groupOf(id);
+        group.forEach(member => seen.add(member));
+        if (group.length < 2) continue;
+        let front = -1;
+        for (const member of group) {
+          const tile = this.tiles[member];
+          const point = this.scene.project(tile.center);
+          if (!point) continue;
+          const nx = point[0] / (this.scene.w / this.scene.dpr) * 2 - 1;
+          const ny = 1 - point[1] / (this.scene.h / this.scene.dpr) * 2;
+          if (Math.abs(nx) <= 1 && Math.abs(ny) <= 1 && this.scene.pick(nx, ny, this.renderList) === member) { front = member; break; }
+        }
+        const rank = (front >= 0 ? 10000 : 0) + group.length;
+        if (rank > bestRank) { best = group; anchor = front >= 0 ? front : group[0]; bestRank = rank; visible = front >= 0; }
+      }
+      const status = document.getElementById('hintStatus');
+      if (!best) { status.textContent = '当前没有可以消除的方块'; return; }
+      this.hintIds = best;
+      this.hintTime = 0;
+      if (!visible) {
+        const p = this.tiles[anchor].center;
+        const yaw = Math.atan2(p[0], p[2]);
+        const pitch = Math.atan2(p[1], Math.hypot(p[0], p[2]));
+        this.hintCamera = { yaw, pitch, fromYaw: this.scene.yaw, fromPitch: this.scene.pitch };
+      }
+      status.textContent = '已标出 ' + best.length + ' 个同色方块，点击白色闪动的方块即可消除';
+    },
+
+    updateHint(dt) {
+      if (!this.hintIds || this.state !== 'play') return;
+      this.hintTime += dt;
+      if (this.hintTime >= 3.5) { this.clearHint(); return; }
+      if (this.hintCamera) {
+        const c = this.hintCamera;
+        const p = this.reduceMotion ? 1 : MX.easeInOutCubic(clamp(this.hintTime / 0.45, 0, 1));
+        const delta = angle => Math.atan2(Math.sin(angle), Math.cos(angle));
+        this.scene.yaw = c.fromYaw + delta(c.yaw - c.fromYaw) * p;
+        this.scene.pitch = c.fromPitch + delta(c.pitch - c.fromPitch) * p;
+        if (p >= 1) this.hintCamera = null;
+      }
+      const bounce = this.reduceMotion ? 0 : Math.abs(Math.sin(this.hintTime * 7));
+      for (const id of this.hintIds) {
+        const tile = this.tiles[id];
+        if (tile) { tile.hintGlow = 0.55 + bounce * 0.22; tile.hintLift = this.board.pitch * 0.2 * bounce; }
+      }
+    },
+
+    clearHint() {
+      if (this.hintIds && this.tiles) for (const id of this.hintIds) {
+        const tile = this.tiles[id];
+        if (tile) { tile.hintGlow = 0; tile.hintLift = 0; tile.renderCenter = null; }
+      }
+      this.hintIds = null;
+      this.hintCamera = null;
+    },
+
     clearHover() {
       if (this.hoverIds) {
         for (let i = 0; i < this.hoverIds.length; i++) {
@@ -420,7 +491,9 @@
         t.size[0] = t.baseSize[0] * s;
         t.size[1] = t.baseSize[1] * s;
         t.size[2] = t.baseSize[2] * s;
-        m4.fromBasisScale(t.model, t.basis, t.center, t.size);
+        const normal = this.board.faces[this.board.faceOf(t.id)].n;
+        t.renderCenter = t.center.map((v, a) => v + normal[a] * (t.hintLift || 0));
+        m4.fromBasisScale(t.model, t.basis, t.renderCenter, t.size);
         const k = 1 - 0.30 * t.squash;
         t.model[1] *= k; t.model[5] *= k; t.model[9] *= k;
         list.push(t);
@@ -436,7 +509,7 @@
       const list = this.renderList;
       for (let i = 0; i < list.length; i++) {
         const t = list[i];
-        if (t.alpha > 0.985) sc.drawBox(t.model, PALETTE[t.color].rgb, [TILE_BEVEL, TILE_STAR], t.highlight, 1);
+        if (t.alpha > 0.985) sc.drawBox(t.model, PALETTE[t.color].rgb, [TILE_BEVEL, TILE_STAR], t.highlight, 1, t.hintGlow);
       }
       for (let i = 0; i < list.length; i++) {
         const t = list[i];
@@ -479,6 +552,7 @@
       const canPlay = () => this.state === 'play';
 
       cv.addEventListener('pointerdown', (e) => {
+        this.hintCamera = null;
         cv.setPointerCapture(e.pointerId);
         pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
         if (pts.size === 1) { dragging = false; moved = 0; downT = performance.now(); lastX = e.clientX; lastY = e.clientY; }
@@ -603,6 +677,7 @@
        ============================================================ */
     pop(group) {
       if (!group || group.length < 2) return;   // 单块不可消
+      this.clearHint();
       this.state = 'busy';
       this.clearHover();
       const n = group.length;
@@ -678,6 +753,7 @@
     },
 
     levelClear() {
+      this.clearHint();
       this.state = 'clear';
       this.clearHover();
       const remain = this.board.aliveCount();
@@ -785,6 +861,7 @@
     },
 
     startLevel(first) {
+      this.clearHint();
       const N = this.cubeSizeFor(this.mode, this.level);
       this.N = N;
       this.board = new window.Board(N);
@@ -821,6 +898,7 @@
     restart() { this.startGame(this.mode); },
 
     toMenu() {
+      this.clearHint();
       this.state = 'menu';
       this.timer = null;
       this.dying.length = 0;
@@ -887,6 +965,7 @@
       });
       document.getElementById('btnHowto').addEventListener('click', () => this.showHelp(true));
       document.getElementById('btnHelp').addEventListener('click', () => this.showHelp());
+      document.getElementById('btnHint').addEventListener('click', () => this.showHint());
       document.getElementById('btnMenu').addEventListener('click', () => this.toMenu());
       const sb = document.getElementById('btnSound');
       sb.addEventListener('click', () => {

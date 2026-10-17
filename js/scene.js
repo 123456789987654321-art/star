@@ -39,6 +39,7 @@
     'uniform vec3 uCamPos;',
     'uniform vec2 uFlags;',     // x: 圆角/边缘强度, y: 星形强度
     'uniform float uHighlight;',
+    'uniform float uHint;',
     'uniform float uAlpha;',
 
     'float starR(float ang){',
@@ -85,6 +86,7 @@
     '  col += vec3(0.32, 0.46, 0.95) * rim * 0.55;',
     '  col += vec3(1.0) * spec * 0.22;',
     '  col += uHighlight * vec3(0.45, 0.42, 0.20);',            // 悬停高亮呼吸
+    '  col = mix(col, vec3(1.0), uHint);',
     '  gl_FragColor = vec4(col, uAlpha);',
     '}'
   ].join('\n');
@@ -272,7 +274,7 @@
       this.progTile = makeProgram(gl, TILE_VS, TILE_FS);
       this.tileLoc = this._locs(this.progTile, [
         'aPos', 'aNormal', 'aUV', 'aOut', 'uProj', 'uView', 'uModel',
-        'uColor', 'uCamPos', 'uFlags', 'uHighlight', 'uAlpha'
+        'uColor', 'uCamPos', 'uFlags', 'uHighlight', 'uHint', 'uAlpha'
       ]);
 
       this.progPt = makeProgram(gl, PT_VS, PT_FS);
@@ -397,12 +399,13 @@
     }
 
     /** 画一个方块（用盒子几何 + 模型矩阵） */
-    drawBox(model, color, flags, highlight, alpha) {
+    drawBox(model, color, flags, highlight, alpha, hint = 0) {
       const gl = this.gl, L = this.tileLoc;
       gl.uniformMatrix4fv(L.uModel, false, model);
       gl.uniform3fv(L.uColor, color);
       gl.uniform2f(L.uFlags, flags[0], flags[1]);
       gl.uniform1f(L.uHighlight, highlight);
+      gl.uniform1f(L.uHint, hint);
       gl.uniform1f(L.uAlpha, alpha);
       gl.depthMask(alpha > 0.985);
       gl.drawElements(gl.TRIANGLES, this.boxCount, gl.UNSIGNED_SHORT, 0);
@@ -491,7 +494,8 @@
       for (let i = 0; i < tiles.length; i++) {
         const t = tiles[i];
         const e = t.basis, s = t.size;
-        const dx = ray.o[0] - t.center[0], dy = ray.o[1] - t.center[1], dz = ray.o[2] - t.center[2];
+        const center = t.renderCenter || t.center;
+        const dx = ray.o[0] - center[0], dy = ray.o[1] - center[1], dz = ray.o[2] - center[2];
         const lo = [
           (dx * e[0] + dy * e[1] + dz * e[2]) / s[0],
           (dx * e[3] + dy * e[4] + dz * e[5]) / s[1],
