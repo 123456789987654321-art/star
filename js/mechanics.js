@@ -126,7 +126,7 @@
       }
       return seams;
     }
-    updateProjection(project, visible, eye) {
+    updateProjection(project, visible, eye, pickAt) {
       const b=this.board,half=b.pitch/2;
       const faces=center=>{
         const result=[];
@@ -143,6 +143,48 @@
       };
       const surface=b.cells.map((_,id)=>b.color[id]>=0?faces(b.cellCenter(id)):null);
       const links=[];
+      if(pickAt) {
+        // Occlusion cuts new visible boundaries into a face. Sample the final
+        // depth-tested image on each side of an edge, not its uncut polygon.
+        const panels=Array.from({length:6},(_,i)=>this.colors[i]>=0?faces(this.center(i)):[]);
+        const bounds=shape=>[Math.min(...shape.map(p=>p[0])),Math.max(...shape.map(p=>p[0])),Math.min(...shape.map(p=>p[1])),Math.max(...shape.map(p=>p[1]))];
+        const panelBounds=panels.flat().filter(s=>s.length>=3).map(bounds);
+        const nearPanel=shape=>{const r=bounds(shape);return panelBounds.some(q=>r[0]<=q[1]+2&&q[0]<=r[1]+2&&r[2]<=q[3]+2&&q[2]<=r[3]+2);};
+        const projectedBounds=[];
+        surface.forEach((shapes,id)=>{if(shapes&&shapes.length)projectedBounds.push({id,rect:bounds(shapes.flat())});});
+        panels.forEach((shapes,i)=>{if(shapes.length)projectedBounds.push({id:b.size+i,rect:bounds(shapes.flat())});});
+        const cache=new Map(),found=new Set();
+        const pick=p=>{
+          const key=p.map(v=>v.toFixed(2)).join(',');
+          if(!cache.has(key)) {
+            const candidates=projectedBounds.filter(({rect:r})=>p[0]>=r[0]-0.01&&p[0]<=r[1]+0.01&&p[1]>=r[2]-0.01&&p[1]<=r[3]+0.01).map(v=>v.id);
+            cache.set(key,pickAt(p,candidates));
+          }
+          return cache.get(key);
+        };
+        const scan=shape=>{
+          if(shape.length<3||!nearPanel(shape))return;
+          for(let edge=0;edge<shape.length;edge++) {
+            const a=shape[edge],z=shape[(edge+1)%shape.length],dx=z[0]-a[0],dy=z[1]-a[1],length=Math.hypot(dx,dy);
+            if(length<4)continue;
+            const inset=Math.min(1.25,length*0.06),nx=-dy/length*inset,ny=dx/length*inset;
+            let previous='',run=0;
+            for(let sample=1;sample<=9;sample++) {
+              const t=sample/10,x=a[0]+dx*t,y=a[1]+dy*t;
+              const first=pick([x+nx,y+ny]),second=pick([x-nx,y-ny]);
+              const main=Math.min(first,second),extra=Math.max(first,second);
+              const valid=main>=0&&main<b.size&&extra>=b.size&&extra<b.size+6&&b.color[main]>=0&&this.colors[extra-b.size]>=0;
+              const key=valid?main+','+extra:'';
+              run=key&&key===previous?run+1:key?1:0;previous=key;
+              if(run>=3&&length*(run-1)/10>=3)found.add(key);
+            }
+          }
+        };
+        panels.flat().forEach(scan);
+        surface.forEach(shapes=>{if(shapes)shapes.forEach(scan);});
+        this.links=Array.from(found,key=>key.split(',').map(Number));
+        return;
+      }
       for(let i=0;i<6;i++) {
         if(this.colors[i]<0)continue;
         const id=b.size+i,center=this.center(i),shapes=faces(center);

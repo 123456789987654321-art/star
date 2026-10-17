@@ -346,7 +346,11 @@
         if(!p)return false;
         const x=p[0]/(sc.w/sc.dpr)*2-1,y=1-p[1]/(sc.h/sc.dpr)*2;
         return Math.abs(x)<=1 && Math.abs(y)<=1 && sc.pick(x,y,this.renderList)===id;
-      },sc.eye);
+      },sc.eye,(p,candidates)=>{
+        const x=p[0]/(sc.w/sc.dpr)*2-1,y=1-p[1]/(sc.h/sc.dpr)*2;
+        const tiles=candidates?this.renderList.filter(t=>candidates.includes(t.id)||this.dying.includes(t)):this.renderList;
+        return Math.abs(x)<=1&&Math.abs(y)<=1?sc.pick(x,y,tiles):-1;
+      });
     },
 
     updateTimers(dt) {

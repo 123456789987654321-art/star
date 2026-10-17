@@ -5,6 +5,9 @@
 - Last published commit: 188f039 (camera-relative orbit).
 # Completion update
 
+- Fixed remaining oblique-view mismatch: actual depth-picked visible boundaries now include seams created by partial occlusion, rather than requiring both original polygon edges to coincide.
+- Real Scene projection/raycast regression yaw -1.4, pitch .65 failed with old path and passed with new path; visible gap and fully hidden panel rejected. Browser group [218,133,219] actually clicked for 45 points. 60/60 tests; fresh review no important findings.
+
 - Final review: fixed seam visibility cache retaining obsolete occlusion from disappearing tiles. Added failing regression, then keyed cache on fading tile positions/scale and removal. Final suite 57/57.
 
 - Fixed omitted partial-view matches: camera-facing face polygons replace full-cube silhouettes, with ray picks just inside each visible seam instead of requiring visible block centres. Partial shared edges count; corner-only and overlap still rejected.
