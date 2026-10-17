@@ -125,6 +125,7 @@
       try { window.localStorage.setItem('popstar3d.best', String(v)); } catch (e) { /* 本地文件可能不允许 */ }
     },
     trackBest() {
+      if (this.mode === 'test') return;
       if (this.score > this.best) {
         this.best = this.score;
         this.newRecord = true;
@@ -139,6 +140,7 @@
 
     /* ---------- 关卡参数 ---------- */
     cubeSizeFor(mode, level) {
+      if (mode === 'test') return 7;
       return window.LevelProfile(level).size;
     },
     targetFor(level, tiles) {
@@ -157,18 +159,24 @@
     /* ============================================================
        方块 / 棋盘
        ============================================================ */
-    colorAt(id) { return id < this.board.size ? this.board.colorOf(id) : this.rotor ? this.rotor.colors[id - this.board.size] : -1; },
+    colorAt(id) {
+      if (id < 0) return -1;
+      if (id < this.board.size) return this.board.colorOf(id);
+      const index = id - this.board.size;
+      if (this.rotor) return this.rotor.colors[index] ?? -1;
+      return this.tunnel && this.tunnel.pieces[index] && !this.tunnel.pieces[index].exited ? 6 : -1;
+    },
     remainingCount() { return this.board.aliveCount() + (this.tunnel ? this.tunnel.remaining() : 0) + (this.rotor ? this.rotor.remaining() : 0); },
     groupAt(id) {
-      if (!this.rotor) return this.board.groupOf(id);
+      if (!this.rotor && !this.tunnel) return this.board.groupOf(id);
       const c = this.colorAt(id);
       if (c < 0 || this.board.covered[id]) return [];
-      const contacts = this.rotor.contacts();
+      const contacts = (this.rotor || this.tunnel).contacts();
       const run = color => {
         const out = [], stack = [id], seen = new Set([id]);
         while (stack.length) {
           const cur = stack.pop(); out.push(cur);
-          const neighbors = cur < this.board.size ? this.board.neighbors(cur) : this.rotor.neighbors(cur - this.board.size).map(i => i + this.board.size);
+          const neighbors = cur < this.board.size ? this.board.neighbors(cur) : this.rotor ? this.rotor.neighbors(cur - this.board.size).map(i => i + this.board.size) : [];
           contacts.forEach(([a, b]) => { if (a === cur) neighbors.push(b); else if (b === cur) neighbors.push(a); });
           for (const next of neighbors) if (!seen.has(next) && !this.board.covered[next] && (this.colorAt(next) === color || this.colorAt(next) === 6)) { seen.add(next); stack.push(next); }
         }
@@ -179,7 +187,9 @@
     hasPotentialMoves() {
       if (this.board.hasMoves()) return true;
       if (this.tunnel && this.tunnel.remaining()) {
-        if ([[-2, 0], [2, 0], [0, -2], [0, 2]].some(p => this.board.color[this.tunnel.exitId(...p)] < 0)) return true;
+        // Every arm reaches an outlet: an empty outlet allows exit, an occupied
+        // one allows a wildcard match. A centre piece is not a dead end.
+        return true;
       }
       if (this.rotor && this.rotor.remaining()) {
         const saved = this.rotor.angle;
@@ -194,7 +204,7 @@
       return false;
     },
     updateMechanics(dt) {
-      if (this.rotor && ['play', 'busy', 'intro'].includes(this.state)) {
+      if (this.rotor && ['play', 'busy'].includes(this.state)) {
         this.rotor.update(dt);
         for (let i = 0; i < 6; i++) {
           const tile = this.tiles[this.board.size + i];
@@ -209,12 +219,32 @@
       }
       if (this.tunnel && this.state === 'play') {
         const arrivals = this.tunnel.update(dt, this.scene.up.map(v => -v));
+        this.syncTunnelTiles();
+        const signature = JSON.stringify(this.tunnel.contacts());
+        if (signature !== this.tunnelContactKey) {
+          this.tunnelContactKey = signature; this.clearHover();
+          if (this.hintIds && this.hintIds.some(id => id >= this.board.size)) this.clearHint();
+        }
         if (arrivals.length) {
           this.clearHint(); this.clearHover();
           arrivals.forEach(({ id }) => { this.tiles[id] = this.makeTile(id, 6); });
           this.settle();
         }
       }
+    },
+    syncTunnelTiles() {
+      if (!this.tunnel) return;
+      this.tunnel.pieces.forEach((piece, i) => {
+        const id = this.board.size + i;
+        if (piece.exited) { this.tiles[id] = null; return; }
+        let tile = this.tiles[id];
+        if (!tile) {
+          tile = this.makeTile(0, 6); tile.id = id; tile.external = true; tile.mechanic = 'tunnel';
+          tile.homeBasis = [1,0,0,0,1,0,0,0,1]; tile.basis = tile.homeBasis.slice();
+          this.tiles[id] = tile;
+        }
+        tile.center = this.tunnel.center(i);
+      });
     },
     tileGeom() {
       const p = this.board.pitch;
@@ -474,7 +504,7 @@
       this.clearHover();
       const seen = new Set();
       let best = null, anchor = -1, bestRank = -1, visible = false;
-      for (let id = 0; id < this.board.size + (this.rotor ? 6 : 0); id++) {
+      for (let id = 0; id < this.board.size + (this.rotor ? 6 : this.tunnel ? 2 : 0); id++) {
         if (seen.has(id) || this.colorAt(id) < 0) continue;
         const group = this.groupAt(id);
         group.forEach(member => seen.add(member));
@@ -568,20 +598,21 @@
         const box = (id, center, size, rgb, mark = 0) => {
           const basis = [1,0,0,0,1,0,0,0,1], model = m4.create();
           m4.fromBasisScale(model, basis, center, size);
-          list.push({ id, center, size, basis, model, rgb, mark, special: true, alpha: 1, highlight: 0 });
+          list.push({ id, center, size, basis, model, rgb, mark, special: true, alpha: id === -10 ? 0.12 : 1, pickThrough: id === -10, highlight: 0 });
         };
         const metal = [0.18,0.34,0.46];
-        box(-10, [0,0,-0.23], [1.65,0.44,0.04], metal);
-        box(-10, [0,0,-0.23], [0.44,1.65,0.04], metal);
+        const p = this.board.pitch, end = this.tunnel.exitStep * p;
+        const width = p * 1.1, wall = p * 0.0875, depth = p * 1.1;
+        box(-10, [0,0,-p*0.575], [end*2,width,p*0.1], metal);
+        box(-10, [0,0,-p*0.575], [width,end*2,p*0.1], metal);
+        const armLength = end - width/2, armCenter = (end + width/2)/2;
         for (const sign of [-1,1]) for (const side of [-1,1]) {
-          box(-10, [sign*0.52,side*0.23,0], [0.60,0.035,0.44], metal);
-          box(-10, [side*0.23,sign*0.52,0], [0.035,0.60,0.44], metal);
+          box(-10, [sign*armCenter,side*p*0.575,0], [armLength,wall,depth], metal);
+          box(-10, [side*p*0.575,sign*armCenter,0], [wall,armLength,depth], metal);
         }
         this.tunnel.gates.forEach((gate, i) => {
-          if (gate.progress < 1) box(-100-i, i ? [0,0.2-gate.progress*0.6,0] : [-0.2,-gate.progress*0.6,0], i ? [0.40,0.05,0.40] : [0.05,0.40,0.40], [0.95,0.64,0.18]);
-        });
-        this.tunnel.pieces.forEach((piece, i) => {
-          if (!piece.exited) box(-200-i, [piece.position[0]*this.board.pitch,piece.position[1]*this.board.pitch,0], [0.36,0.36,0.36], PALETTE[6].rgb, 1);
+          const offset = (this.tunnel.innerStep-0.5)*p, drop = gate.progress*p*1.5;
+          if (gate.progress < 1) box(-100-i, i ? [0,offset-drop,0] : [-offset,-drop,0], i ? [p,p*0.125,p] : [p*0.125,p,p], [0.95,0.64,0.18]);
         });
       }
     },
@@ -812,7 +843,8 @@
         t.highlight = 0;
         this.dying.push(t);
         this.tiles[id] = null;
-        if (t.external) this.rotor.colors[id - this.board.size] = -1;
+        if (t.mechanic === 'tunnel') this.tunnel.pieces[id - this.board.size].exited = true;
+        else if (t.external) this.rotor.colors[id - this.board.size] = -1;
         else this.board.remove([id]);
 
         this.scene.particles.burst(t.center, PALETTE[t.color].rgb, n >= 10 ? 12 : 7, {
@@ -908,6 +940,10 @@
     },
 
     showClearPanel() {
+      if (this.mode === 'test') {
+        this.overlay(`<h2 class="ov-title">测试完成</h2><p class="ov-sub">${window.LevelProfile(this.level).title} · 得分 ${this.score}</p><div class="ov-actions"><button class="ov-btn" data-act="restart">再试一次</button><button class="ov-btn plain" data-act="menu">选择其他关卡</button></div>`);
+        return;
+      }
       const passed = this.score >= this.target;
       if (!passed) { this.gameOver('分数不足'); return; }
       const nextN = this.cubeSizeFor(this.mode, this.level + 1);
@@ -964,9 +1000,9 @@
     /* ============================================================
        流程控制
        ============================================================ */
-    startGame(mode) {
+    startGame(mode, testLevel = 1) {
       this.mode = mode;
-      this.level = 1;
+      this.level = mode === 'test' ? clamp(Math.round(testLevel), 1, 3) : 1;
       this.score = 0;
       this.newRecord = false;
       this.startLevel(true);
@@ -990,6 +1026,7 @@
       this.lastTickSec = -1;
       this.scene.particles.clear();
       this.spawnTilesFalling(!first);
+      this.syncTunnelTiles();
       if (this.rotor) for (let i = 0; i < 6; i++) {
         const tile = this.makeTile(0, this.rotor.colors[i]);
         tile.id = this.board.size + i; tile.external = true;
@@ -1017,7 +1054,7 @@
       b.classList.add('show');
     },
 
-    restart() { this.startGame(this.mode); },
+    restart() { this.startGame(this.mode, this.level); },
 
     toMenu() {
       this.clearHint();
@@ -1073,6 +1110,12 @@
        UI
        ============================================================ */
     bindUI() {
+      document.querySelectorAll('[data-test-level]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          window.Sfx.init(); window.Sfx.resume();
+          this.startGame('test', Number(btn.dataset.testLevel));
+        });
+      });
       const zoomSlider = document.getElementById('zoomSlider');
       zoomSlider.addEventListener('input', () => { this.clearHover(); this.setZoom(Number(zoomSlider.value) / 100); });
       zoomSlider.addEventListener('keydown', (e) => {
@@ -1150,9 +1193,9 @@
           </ul>
           <h4>机关关卡（均为 5×5）</h4>
           <ul>
-            <li>第 1、2 关：普通 5×5 消除，目标分逐关增加。</li>
-            <li>第 3 关：2×3 旋转方板。接触主体时，同色方块可以连成一组，仍需点击消除。</li>
-            <li>第 4 关：先消掉前方方块露出十字通道，点击金色挡板。转动立方体，让灰色问号块沿屏幕下方移动；出口空着时进入表面，可与任一颜色组合。</li>
+            <li>第 1 关：普通 5×5 消除。菜单的「关卡测试」可以独立体验三种 7×7 关卡，机关按格子尺寸适配。</li>
+            <li>第 2 关：2×3 旋转方板，停 2.4 秒、转 90°，六个方块都能接触主体，同色组合仍需点击消除。</li>
+            <li>第 3 关：透明十字通道，点击金色挡板后，转动整体引导灰色问号块。问号块接触彩块后形成组合，仍需点击才消除；出口空着时也可滑入表面。</li>
           </ul>
         </div>
         <div class="ov-actions" style="margin-top:18px">
@@ -1162,7 +1205,7 @@
 
     updateHud() {
       const $ = (id) => document.getElementById(id);
-      $('hudMode').textContent = this.mode === 'normal' ? '普通模式' : '挑战模式';
+      $('hudMode').textContent = this.mode === 'test' ? '关卡测试' : this.mode === 'normal' ? '普通模式' : '挑战模式';
       $('hudLevel').textContent = this.level;
       $('hudScore').textContent = this.score;
       $('hudTarget').textContent = this.target;

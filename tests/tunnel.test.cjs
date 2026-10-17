@@ -33,3 +33,15 @@ test('cross centre allows switching axis and two cubes never share a channel cel
   const occupied = t.pieces.filter(p => !p.exited).map(p => p.cell.join(','));
   assert.equal(new Set(occupied).size, occupied.length);
 });
+test('7x7 tunnel reaches all four shell outlets and scales its starting positions',()=>{
+  const b=new Board(7);b.color.fill(0);const t=new CrossTunnel(b);
+  for(const position of [[-3,0],[3,0],[0,-3],[0,3]]) {
+    const id=t.exitId(...position);assert.ok(id>=0);
+    assert.ok(b.cellCenter(id).some(v=>Math.abs(Math.abs(v)-(1-b.pitch/2))<1e-8));
+  }
+  assert.deepEqual(t.pieces[0].cell,[-2,0]);
+  assert.deepEqual(t.pieces[1].cell,[0,2]);
+  const exit=t.exitId(-3,0);b.remove([exit]);t.openGate(0);
+  for(let i=0;i<100;i++)t.update(0.02,[-1,0,0]);
+  assert.equal(t.pieces[0].exited,true);assert.equal(b.color[exit],6);
+});

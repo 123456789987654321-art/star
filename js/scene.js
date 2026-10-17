@@ -529,6 +529,7 @@
 
       for (let i = 0; i < tiles.length; i++) {
         const t = tiles[i];
+          if (t.pickThrough) continue;
         const e = t.basis, s = t.size;
         const center = t.renderCenter || t.center;
         const dx = ray.o[0] - center[0], dy = ray.o[1] - center[1], dz = ray.o[2] - center[2];

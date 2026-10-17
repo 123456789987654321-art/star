@@ -1,5 +1,7 @@
 # Level mechanics implementation plan
 
+Latest scope: ordinary/rotor/tunnel are levels 1/2/3 and independently selectable test levels. Rotor must hold 2.4s and turn 90 degrees over 0.8s, all six cubes contacting at rest. Channel walls transparent and click-through. Internal wildcard contact creates a selectable group, never automatic removal. Future reachable contacts must prevent premature settlement. Verified with rule tests and Edge interaction.
+
 Superseding revision: black coating cancelled by user. Level 2 is now ordinary 5x5; rotor stays level 3, tunnel stays level 4. Earlier coating requirements below are historical.
 
 Goal: Add coatings, a rotating 2x3 panel and a four-exit cross tunnel. Latest user request orders them by difficulty: level 2 coating, level 3 rotor, level 4 tunnel. Levels 1–4 remain 5x5; maximum supported progression is 8x8. Later size progression remains unspecified, so unconfigured levels retain 5x5.

@@ -1,6 +1,8 @@
 # Current task: level mechanics
 
-Latest revision: user cancelled black coating. Levels 1 and 2 are ordinary 5x5; level 3 rotor and level 4 tunnel remain.
+Newest requirement: test mode alone uses 7x7. Scale tunnel length, endpoints, gates and grey cubes; rotor keeps 2x3 and uses the smaller pitch. Normal progression remains 5x5.
+
+Latest revision: level 1 ordinary, level 2 rotor, level 3 tunnel. Menu offers independent test entries. Rotor pauses 2.4s and turns 90 degrees over 0.8s; all six cubes contact shell at rest. Channel walls transparent and click-through. Touching wildcards form selectable groups, never automatically disappear.
 
 See docs/superpowers/plans/2026-10-17-level-mechanics.md.
 

@@ -16,10 +16,18 @@ test('定位键将六个面的箭头分别转向屏幕下方，保留缩放', ()
     assert.equal(a.zoom, 0.7); assert.equal(a.scene.dist, 6);
   }
 });
-test('取消黑膜后前两关普通、第三关方板、第四关通道，目标分递增', () => {
-  assert.deepEqual([1,2,3,4].map(n => ctx.LevelProfile(n).kind), ['normal','normal','rotor','tunnel']);
+test('关卡依次为普通、方板、通道，目标分递增', () => {
+  assert.deepEqual([1,2,3,4].map(n => ctx.LevelProfile(n).kind), ['normal','rotor','tunnel','normal']);
   for (let n = 1; n <= 4; n++) {
     assert.equal(ctx.LevelProfile(n).size, 5);
     assert.ok(ctx.App.targetFor(n + 1, 98) > ctx.App.targetFor(n, 98));
+  }
+});
+
+test('independent tests use 7x7 while normal progression remains 5x5', () => {
+  for (const level of [1,2,3]) {
+    assert.equal(ctx.App.cubeSizeFor('test',level),7);
+    assert.equal(ctx.App.cubeSizeFor('normal',level),5);
+    assert.equal(ctx.App.cubeSizeFor('challenge',level),5);
   }
 });

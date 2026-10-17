@@ -75,6 +75,21 @@ canvas#gl {
 .subtitle { margin: 0 0 30px; font-size: 13px; letter-spacing: .34em; color: #93a2cc; }
 
 .menu-btns { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+.test-levels { margin-top: 20px; width: 100%; }
+.test-levels h2 { margin: 0 0 10px; font-size: 14px; color: #c9d4f2; }
+.test-level-buttons { display: flex; gap: 8px; }
+.test-level-buttons button {
+  flex: 1; min-height: 44px; padding: 8px 4px; pointer-events: auto;
+  border: 1px solid #6478a0; border-radius: 10px; color: #eef4ff;
+  background: #18223e; cursor: pointer; font: inherit; font-size: 13px;
+}
+.test-level-buttons button:hover { background: #2c3e66; }
+.test-level-buttons button:focus-visible { outline: 2px solid #8edfff; outline-offset: 3px; }
+.test-levels p { font-size: 11px; color: #a1b0ce; margin: 8px 0 0; }
+@media (max-height: 620px) {
+  #menu { overflow-y: auto; align-items: flex-start; pointer-events: auto; }
+  .subtitle { margin-bottom: 14px; }
+}
 
 .mode-btn {
   position: relative; width: 100%; padding: 16px 20px 15px;
