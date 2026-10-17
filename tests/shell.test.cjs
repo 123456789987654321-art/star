@@ -14,6 +14,14 @@ function bounds(t) {
   return { min: t.center.map((v, a) => v - half[a]), max: t.center.map((v, a) => v + half[a]) };
 }
 for (const N of [4, 5, 6, 7]) {
+  test(`N=${N}: shell consists of equal cubes, with shared edge and corner blocks`, () => {
+    App.board = new Board(N);
+    assert.equal(App.board.size, N ** 3 - (N - 2) ** 3);
+    for (let id = 0; id < App.board.size; id++) {
+      const tile = App.makeTile(id, 0);
+      for (const side of tile.size) assert.ok(Math.abs(side - 2 / N) < 1e-9);
+    }
+  });
   test(`N=${N}: six surfaces cover edges and corners, with an empty interior and no overlapping blocks`, () => {
     App.board = new Board(N);
     const boxes = Array.from({ length: App.board.size }, (_, id) => bounds(App.makeTile(id, 0)));
@@ -38,11 +46,45 @@ for (const N of [4, 5, 6, 7]) {
 }
 test('picking through a removed front tile reaches the visible back tile', () => {
   App.board = new Board(5);
-  const back = App.makeTile(App.board.id(2, 2, 2), 0);
-  const front = App.makeTile(App.board.id(0, 2, 2), 0);
+  const back = App.makeTile(App.board.id(2, 1, 2), 0);
+  const front = App.makeTile(App.board.id(0, 1, 2), 0);
   const scene = Object.create(Scene.prototype);
   scene._ray = () => ({ o: [0, 0, 5], d: [0, 0, -1] });
   assert.equal(scene.pick(0, 0, [back, front]), front.id);
   assert.equal(scene.pick(0, 0, [back]), back.id);
   assert.equal(scene.pick(0, 0, []), -1);
+});
+
+test('connected groups match physical face contact, including shared corners', () => {
+  const b = new Board(5);
+  b.color.fill(0);
+  assert.equal(b.groupOf(0).length, 98);
+  for (let id = 0; id < b.size; id++) {
+    const p = b.cellCenter(id);
+    const expected = [];
+    for (let other = 0; other < b.size; other++) {
+      const q = b.cellCenter(other);
+      const delta = p.map((v, a) => Math.abs(v - q[a]));
+      if (delta.filter(v => v > 1e-8).length === 1 && Math.abs(delta.reduce((a, v) => a + v, 0) - b.pitch) < 1e-8) expected.push(other);
+    }
+    assert.deepEqual(Array.from(b.neighbors(id)).sort((a, b) => a - b), expected);
+  }
+});
+
+test('gravity preserves blocks and keeps all destination cubes on the hollow shell', () => {
+  App.board = new Board(5);
+  const b = App.board;
+  for (let id = 0; id < b.size; id++) b.color[id] = id % 3 === 0 ? -1 : id % 6;
+  const before = Array.from(b.color).filter(c => c >= 0).sort();
+  const moves = b.applyGravity();
+  assert.ok(moves.length > 0);
+  assert.deepEqual(Array.from(b.color).filter(c => c >= 0).sort(), before);
+  for (const move of moves) {
+    assert.equal(b.faceOf(move.from), b.faceOf(move.to));
+    assert.ok(b.rowOf(move.to) > b.rowOf(move.from));
+    const tile = App.makeTile(move.to, b.colorOf(move.to));
+    assert.ok(tile.center.some(v => Math.abs(Math.abs(v) - 0.8) < 1e-8));
+    assert.ok(tile.size.every(v => Math.abs(v - 0.4) < 1e-8));
+  }
+  assert.equal(b.applyGravity().length, 0);
 });

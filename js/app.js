@@ -132,12 +132,12 @@
       return clamp(4 + Math.floor((level - 1) / 2), 4, 7);
     },
     targetFor(level, tiles) {
-      // 实测：6 色 5×5×6 面一关大约能拿 2300 分，所以每关要求涨 700 左右
+      // 沿用每块的目标分比例，按实际外壳块数缩放。
       const raw = (750 * level + 350 * level * (level - 1)) * (tiles / 150);
       return Math.round(raw / 100) * 100;
     },
     starSteps() {
-      const base = this.targetFor(1, 6 * 5 * 5) || 750;
+      const base = this.targetFor(1, 98) || 500;
       return STAR_MULT.map((m) => Math.round(base * m / 100) * 100);
     },
     timeFor(level) {
@@ -147,43 +147,25 @@
     /* ============================================================
        方块 / 棋盘
        ============================================================ */
-    tileGeom(id) {
+    tileGeom() {
       const p = this.board.pitch;
-      const f = this.board.faceOf(id);
-      const depth = p * 0.35;
-      // 顶底封住棱角，前后夹在顶底之间，左右再夹在前后之间。
-      // 每面整张网格一起缩放，保持面内方块等大，下落时无需改变形状。
-      const spanX = f === 1 || f === 3 ? 1 - depth : 1;
-      const spanY = f < 4 ? 1 - depth : 1;
-      return {
-        size: [p * spanX, p * spanY, depth],
-        spanX, spanY,
-        offset: -depth / 2
-      };
+      return { size: [p, p, p] };
     },
 
     /** 某格方块在世界空间中的中心 */
-    centerOf(id, g) {
-      const b = this.board;
-      const f = b.faceOf(id);
-      const p = b.cellPos(f, b.rowOf(id), b.colOf(id));
-      const n = b.faces[f].n;
-      const geom = g || this.tileGeom(id);
-      const F = b.faces[f];
-      const x = v3.dot(p, F.r), y = v3.dot(p, F.d);
-      return p.map((v, a) => v + n[a] * geom.offset +
-        F.r[a] * x * (geom.spanX - 1) + F.d[a] * y * (geom.spanY - 1));
+    centerOf(id) {
+      return this.board.cellCenter(id);
     },
 
     makeTile(id, color) {
       const b = this.board;
       const f = b.faceOf(id);
-      const geom = this.tileGeom(id);
+      const geom = this.tileGeom();
       const basis = b.faceBasis(f);
       return {
         id,
         color,
-        center: this.centerOf(id, geom),
+        center: this.centerOf(id),
         homeBasis: basis,
         basis: basis.slice(),
         baseSize: geom.size.slice(),
