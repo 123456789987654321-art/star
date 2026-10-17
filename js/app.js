@@ -16,7 +16,6 @@
   ];
   const NC = PALETTE.length;
   const TILE_BEVEL = 1.0, TILE_STAR = 1.0;
-  const CORE_COLOR = [0.075, 0.088, 0.17];
 
   /* 星级：按第一关目标的倍数走，这样不同尺寸的立方体都合适 */
   const STAR_MULT = [1, 3, 6, 10, 15];
@@ -148,13 +147,18 @@
     /* ============================================================
        方块 / 棋盘
        ============================================================ */
-    tileGeom() {
+    tileGeom(id) {
       const p = this.board.pitch;
+      const f = this.board.faceOf(id);
+      const depth = p * 0.35;
+      // 顶底封住棱角，前后夹在顶底之间，左右再夹在前后之间。
+      // 每面整张网格一起缩放，保持面内方块等大，下落时无需改变形状。
+      const spanX = f === 1 || f === 3 ? 1 - depth : 1;
+      const spanY = f < 4 ? 1 - depth : 1;
       return {
-        // 局部 X/Y = 切向尺寸，Z = 朝外厚度。
-        // 厚度别太大：凸出越高，斜视角下前后排会互相遮挡，侧面就点不清了。
-        size: [p * 0.84, p * 0.84, p * 0.58],
-        offset: p * 0.26                       // 方块中心相对表面的外移量（略微陷入核里，不留缝）
+        size: [p * spanX, p * spanY, depth],
+        spanX, spanY,
+        offset: -depth / 2
       };
     },
 
@@ -164,14 +168,17 @@
       const f = b.faceOf(id);
       const p = b.cellPos(f, b.rowOf(id), b.colOf(id));
       const n = b.faces[f].n;
-      const o = (g || this.tileGeom()).offset;
-      return [p[0] + n[0] * o, p[1] + n[1] * o, p[2] + n[2] * o];
+      const geom = g || this.tileGeom(id);
+      const F = b.faces[f];
+      const x = v3.dot(p, F.r), y = v3.dot(p, F.d);
+      return p.map((v, a) => v + n[a] * geom.offset +
+        F.r[a] * x * (geom.spanX - 1) + F.d[a] * y * (geom.spanY - 1));
     },
 
     makeTile(id, color) {
       const b = this.board;
       const f = b.faceOf(id);
-      const geom = this.tileGeom();
+      const geom = this.tileGeom(id);
       const basis = b.faceBasis(f);
       return {
         id,
@@ -394,7 +401,7 @@
       const pulse = 0.34 + 0.30 * Math.sin(this.clock * 7.0);
       for (let i = 0; i < live.length; i++) {
         const t = this.tiles[live[i]];
-        if (t) { t.highlight = pulse; t.scaleMul = 1.055; }
+        if (t) { t.highlight = pulse; t.scaleMul = 1; }
       }
     },
 
@@ -432,8 +439,7 @@
     render() {
       const sc = this.scene;
       sc.beginFrame();
-      // 立方体棱长 2（半边长 1），方块凸出在外；核上画 N×N 网格便于读空格
-      sc.drawCore(2.0, CORE_COLOR, this.N);
+      // 只绘制彩色方块外壳；消除后的空洞直接露出内部。
       const list = this.renderList;
       for (let i = 0; i < list.length; i++) {
         const t = list[i];

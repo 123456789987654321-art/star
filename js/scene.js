@@ -38,7 +38,6 @@
     'uniform vec3 uColor;',
     'uniform vec3 uCamPos;',
     'uniform vec2 uFlags;',     // x: 圆角/边缘强度, y: 星形强度
-    'uniform float uGridN;',    // >0 时在朝外面画 N×N 网格（给立方体核用）
     'uniform float uHighlight;',
     'uniform float uAlpha;',
 
@@ -54,11 +53,8 @@
     '  vec3 N = normalize(vNormal);',
     '  vec3 V = normalize(uCamPos - vWorld);',
 
-    // 圆角方块 SDF（半边长 0.38 + 圆角 0.12 = 0.5，正好贴满这一面）
-    '  vec2 q = abs(vUV) - 0.38;',
-    '  float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 0.12;',
-    '  float inside = smoothstep(0.015, -0.03, d);',
-    '  float edge = smoothstep(-0.03, 0.03, d);',
+    // 窄而明亮的倒角保留方块边界，不再形成粗黑槽或圆角黑洞。
+    '  float edge = smoothstep(0.475, 0.5, max(abs(vUV.x), abs(vUV.y)));',
 
     // 五角星
     '  float rad = length(vUV);',
@@ -66,18 +62,9 @@
     '  float star = smoothstep(sr + 0.012, sr - 0.012, rad) * vOut * uFlags.y;',
 
     '  vec3 base = uColor;',
-    '  base = mix(base * 0.40, base, inside);',                  // 边缘压暗 -> 圆润感
-    '  base *= 1.0 - 0.10 * edge * uFlags.x;',
+    '  base *= 1.0 - 0.16 * edge * uFlags.x;',
     '  base = mix(base, mix(base, vec3(1.0), 0.46), star);',     // 星形提亮
 
-    // 核上的浅网格：让空格子读得出来
-    '  if (uGridN > 0.5) {',
-    '    vec2 g = (vUV + 0.5) * uGridN;',
-    '    vec2 fr = fract(g);',
-    '    vec2 dd = min(fr, 1.0 - fr);',
-    '    float line = 1.0 - smoothstep(0.0, 0.055, min(dd.x, dd.y));',
-    '    base += vec3(0.055, 0.065, 0.115) * line;',
-    '  }',
 
     '  vec3 L1 = normalize(vec3(-0.45, 0.90, 0.50));',
     '  vec3 L2 = normalize(vec3(0.70, 0.10, -0.65));',
@@ -276,7 +263,7 @@
       this.progTile = makeProgram(gl, TILE_VS, TILE_FS);
       this.tileLoc = this._locs(this.progTile, [
         'aPos', 'aNormal', 'aUV', 'aOut', 'uProj', 'uView', 'uModel',
-        'uColor', 'uCamPos', 'uFlags', 'uGridN', 'uHighlight', 'uAlpha'
+        'uColor', 'uCamPos', 'uFlags', 'uHighlight', 'uAlpha'
       ]);
 
       this.progPt = makeProgram(gl, PT_VS, PT_FS);
@@ -398,21 +385,15 @@
     }
 
     /** 画一个方块（用盒子几何 + 模型矩阵） */
-    drawBox(model, color, flags, highlight, alpha, gridN) {
+    drawBox(model, color, flags, highlight, alpha) {
       const gl = this.gl, L = this.tileLoc;
       gl.uniformMatrix4fv(L.uModel, false, model);
       gl.uniform3fv(L.uColor, color);
       gl.uniform2f(L.uFlags, flags[0], flags[1]);
-      gl.uniform1f(L.uGridN, gridN || 0);
       gl.uniform1f(L.uHighlight, highlight);
       gl.uniform1f(L.uAlpha, alpha);
       gl.depthMask(alpha > 0.985);
       gl.drawElements(gl.TRIANGLES, this.boxCount, gl.UNSIGNED_SHORT, 0);
-    }
-
-    drawCore(size, color, gridN) {
-      m4.fromBasisScale(this.tmpM, [1, 0, 0, 0, 1, 0, 0, 0, 1], [0, 0, 0], [size, size, size]);
-      this.drawBox(this.tmpM, color, [0.3, 0.0], 0, 1, gridN);
     }
 
     drawParticles() {
@@ -481,11 +462,10 @@
 
     /**
      * 拾取。tiles 为渲染列表，每项含 { id, center, basis, size }。
-     * 立方体核会挡住背面的方块，所以只返回最靠前且未被核遮挡的那块。
+     * 只由实际存在的方块遮挡，空洞后的内侧方块同样可以被选中。
      */
     pick(nx, ny, tiles) {
       const ray = this._ray(nx, ny);
-      const coreT = Scene.rayBox(ray.o, ray.d, 1.0);
       let bestT = Infinity, bestId = -1;
 
       for (let i = 0; i < tiles.length; i++) {
@@ -504,7 +484,6 @@
         ];
         const tt = Scene.rayBox(lo, ld, 0.5);
         if (tt === Infinity || tt < 0) continue;
-        if (tt > coreT + 1e-3) continue;         // 被立方体核挡住
         if (tt < bestT) { bestT = tt; bestId = t.id; }
       }
       return bestId;
