@@ -88,8 +88,13 @@
       const half = list => { const out=[]; for(const p of list) { while(out.length>1&&cross(out[out.length-2],out[out.length-1],p)<=0)out.pop();out.push(p); }out.pop();return out; };
       return half(sorted).concat(half(sorted.slice().reverse()));
     }
-    static edgesJoin(a,b) {
-      if(a.length<3||b.length<3)return false;
+    static edgesJoin(a,b) { return PerspectivePanel.seams(a,b).length > 0; }
+    static seams(a,b) {
+      const seams=[];
+      if(a.length<3||b.length<3)return seams;
+      const bounds=p=>[Math.min(...p.map(v=>v[0])),Math.max(...p.map(v=>v[0])),Math.min(...p.map(v=>v[1])),Math.max(...p.map(v=>v[1]))];
+      const A=bounds(a),B=bounds(b);
+      if(A[0]>B[1]+2||B[0]>A[1]+2||A[2]>B[3]+2||B[2]>A[3]+2)return seams;
       for(let i=0;i<a.length;i++) {
         const p=a[i],q=a[(i+1)%a.length],len=Math.hypot(q[0]-p[0],q[1]-p[1]);
         if(len<3)continue;
@@ -101,36 +106,52 @@
           if(other<3)continue;
           // Clockwise hulls must have opposing parallel edges at a seam.
           if(((s[0]-r[0])*u[0]+(s[1]-r[1])*u[1])/other> -0.985)continue;
-          const tolerance=1.5; // Small pixel allowance for hand-controlled alignment.
-          if(Math.max(Math.abs(across(r)),Math.abs(across(s)))>tolerance)continue;
-          const overlap=Math.min(len,Math.max(along(r),along(s)))-Math.max(0,Math.min(along(r),along(s)));
-          if(overlap<Math.min(len,other)*0.65)continue;
+          const low=Math.max(0,Math.min(along(r),along(s))),high=Math.min(len,Math.max(along(r),along(s)));
+          const overlap=high-low;
+          if(overlap<Math.max(3,Math.min(len,other)*0.20))continue;
+          const acrossAt=t=>across(r)+(across(s)-across(r))*(t-along(r))/(along(s)-along(r));
+          const tolerance=1.5;
+          if(Math.max(Math.abs(acrossAt(low)),Math.abs(acrossAt(high)))>tolerance)continue;
           // The two silhouettes must lie on opposite sides, not overlap.
           if(Math.max(...b.map(across))>1e-5)continue;
-          return true;
+          const inset=Math.min(1.5,overlap*0.12);
+          for(const fraction of [0.25,0.5,0.75]) {
+            const middle=low+overlap*fraction,gap=acrossAt(middle);
+            seams.push({
+              a:[p[0]+u[0]*middle+n[0]*inset,p[1]+u[1]*middle+n[1]*inset],
+              b:[p[0]+u[0]*middle+n[0]*(gap-inset),p[1]+u[1]*middle+n[1]*(gap-inset)]
+            });
+          }
         }
       }
-      return false;
+      return seams;
     }
-    updateProjection(project, visible) {
+    updateProjection(project, visible, eye) {
       const b=this.board,half=b.pitch/2;
-      const polygon=center=>{
-        const points=[];
-        for(const x of [-half,half])for(const y of [-half,half])for(const z of [-half,half]) {
-          const p=project([center[0]+x,center[1]+y,center[2]+z]);
-          if(!p||!p.every(Number.isFinite))return [];
-          points.push(p);
+      const faces=center=>{
+        const result=[];
+        for(let axis=0;axis<3;axis++)for(const sign of [-1,1]) {
+          if(eye&&(eye[axis]-center[axis]-sign*half)*sign<=0)continue;
+          const others=[0,1,2].filter(a=>a!==axis),points=[];
+          for(const u of [-half,half])for(const v of [-half,half]) {
+            const world=center.slice();world[axis]+=sign*half;world[others[0]]+=u;world[others[1]]+=v;
+            const p=project(world);if(p&&p.every(Number.isFinite))points.push(p);
+          }
+          if(points.length===4)result.push(PerspectivePanel.hull(points));
         }
-        return PerspectivePanel.hull(points);
+        return result;
       };
-      const surface=b.cells.map((_,id)=>b.color[id]>=0?polygon(b.cellCenter(id)):null);
-      const links=[],seen=new Map();
-      const canSee=(id,center)=>{if(!seen.has(id))seen.set(id,visible(id,center));return seen.get(id);};
+      const surface=b.cells.map((_,id)=>b.color[id]>=0?faces(b.cellCenter(id)):null);
+      const links=[];
       for(let i=0;i<6;i++) {
         if(this.colors[i]<0)continue;
-        const id=b.size+i,center=this.center(i),shape=polygon(center);
-        if(!canSee(id,center))continue;
-        for(let j=0;j<b.size;j++)if(surface[j]&&PerspectivePanel.edgesJoin(shape,surface[j])&&canSee(j,b.cellCenter(j)))links.push([j,id]);
+        const id=b.size+i,center=this.center(i),shapes=faces(center);
+        for(let j=0;j<b.size;j++) {
+          if(!surface[j])continue;
+          const connected=shapes.some(shape=>surface[j].some(face=>PerspectivePanel.seams(shape,face).some(seam=>
+            visible(id,center,seam.a)&&visible(j,b.cellCenter(j),seam.b))));
+          if(connected)links.push([j,id]);
+        }
       }
       this.links=links;
     }

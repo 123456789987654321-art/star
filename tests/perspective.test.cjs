@@ -36,3 +36,17 @@ test('projection joins visible aligned blocks, rejects occluded blocks and chang
   panel.updateProjection(project,()=>false);assert.equal(panel.contacts().length,0);
   panel.updateProjection(p=>[p[0]*100,-p[1]*100],()=>true);assert.equal(panel.contacts().length,0);
 });
+
+test('a visible seam counts even when the cube centre is occluded',()=>{
+  const b=new Board(5);b.color.fill(-1);
+  const target=b.cells.findIndex((_,id)=>{const p=b.cellCenter(id);return Math.abs(p[0]-.8)<1e-8&&Math.abs(p[1]-.4)<1e-8&&Math.abs(p[2]-.8)<1e-8;});
+  b.color[target]=0;const panel=new PerspectivePanel(b,()=>0);
+  panel.updateProjection(p=>[(p[0]+0.6*p[2])*100,-p[1]*100],(id,centre,seamPoint)=>!!seamPoint);
+  assert.ok(panel.contacts().some(pair=>pair[0]===target));
+});
+
+test('partial side-by-side edges are connections; a corner alone is not',()=>{
+  const square=(x,y)=>[[x,y],[x+100,y],[x+100,y+100],[x,y+100]];
+  assert.equal(PerspectivePanel.edgesJoin(square(0,0),square(100,60)),true);
+  assert.equal(PerspectivePanel.edgesJoin(square(0,0),square(100,100)),false);
+});

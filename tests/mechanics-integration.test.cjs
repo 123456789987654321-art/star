@@ -39,3 +39,23 @@ test('a perspective seam removes same-colored shell and fixed panel blocks only 
   assert.equal(a.groupAt(0).length,2);assert.equal(a.remainingCount(),2);assert.equal(a.score,0);
   a.pop(a.groupAt(0));assert.equal(a.remainingCount(),0);assert.equal(a.score,20);
 });
+for(const color of [0,2,5]) test(`partial perspective seam joins all three blocks of color ${color}`,()=>{
+  const {a,ctx}=fixture();a.rotor=new ctx.PerspectivePanel(a.board,()=>0);
+  a.board.color[0]=color;a.rotor.colors.fill(-1);a.rotor.colors[0]=a.rotor.colors[1]=color;
+  a.spawnTilesInstant();
+  for(let i=0;i<2;i++) { const t=a.makeTile(0,color);t.id=a.board.size+i;t.external=true;t.center=a.rotor.center(i);a.tiles[t.id]=t; }
+  a.rotor.links=[[0,a.board.size]];a.state='play';a.score=0;
+  const expected=[0,a.board.size,a.board.size+1];
+  for(const id of expected)assert.deepEqual(Array.from(a.groupAt(id)).sort((x,y)=>x-y),expected);
+  assert.equal(a.remainingCount(),3);
+  a.pop(a.groupAt(a.board.size+1));assert.equal(a.remainingCount(),0);assert.equal(a.score,45);
+});
+test('seam visibility cache updates as disappearing cubes move and vanish',()=>{
+  const {a,ctx}=fixture();a.rotor=new ctx.PerspectivePanel(a.board);a.state='play';
+  a.scene.vp=[1];a.scene.w=100;a.scene.h=100;a.dying=[];
+  let calls=0;a.rotor.updateProjection=()=>{calls++;};
+  a.updatePerspectiveContacts();a.updatePerspectiveContacts();assert.equal(calls,1);
+  a.dying.push({id:0,center:[0,0,0],scaleMul:1});a.updatePerspectiveContacts();assert.equal(calls,2);
+  a.dying[0].center[0]=1;a.updatePerspectiveContacts();assert.equal(calls,3);
+  a.dying=[];a.updatePerspectiveContacts();assert.equal(calls,4);
+});

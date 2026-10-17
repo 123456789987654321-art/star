@@ -5,6 +5,11 @@
 - Last published commit: 188f039 (camera-relative orbit).
 # Completion update
 
+- Final review: fixed seam visibility cache retaining obsolete occlusion from disappearing tiles. Added failing regression, then keyed cache on fading tile positions/scale and removal. Final suite 57/57.
+
+- Fixed omitted partial-view matches: camera-facing face polygons replace full-cube silhouettes, with ray picks just inside each visible seam instead of requiring visible block centres. Partial shared edges count; corner-only and overlap still rejected.
+- Added red/green/pink three-block group regressions. 56 tests passed; Edge actual click removed exactly three blocks for 45 points, WebGL error 0.
+
 - Replaced tunnel class, application paths and obsolete tests with fixed perspective panel, visible convex-hull edge contacts and cached view checks.
 - Centred rotor pivot and geometry; complete revolution containment regression passes at 5 and 7.
 - Review caught shallow silhouette overlap accepted as seam. Added failing regression, then separated pixel alignment allowance from numerical overlap rejection.

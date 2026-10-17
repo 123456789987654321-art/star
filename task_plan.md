@@ -1,5 +1,7 @@
 # Current task: level mechanics
 
+Current bugfix: partially visible red/green/pink matching seams must count. Use visible face boundaries and ray-tested seam samples, not whole silhouettes/centre-only visibility. Confirm no double count of one cube's different faces; whole same-color connected group removed by click.
+
 Current superseding scope: delete tunnel and grey wildcard mechanic, replace level3/test3 with fixed 2x3 perspective panel. Only visible projected edges aligned and touching link same colors; no overlap, player click required. Rotor pivot now centred on host face and footprint stays contained through all angles. Test7x7/main5x5 retained.
 
 Newest requirement: test mode alone uses 7x7. Scale tunnel length, endpoints, gates and grey cubes; rotor keeps 2x3 and uses the smaller pitch. Normal progression remains 5x5.

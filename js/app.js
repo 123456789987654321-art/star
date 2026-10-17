@@ -337,15 +337,16 @@
     updatePerspectiveContacts() {
       const panel=this.rotor,sc=this.scene;
       if(!panel || !panel.projected || this.state!=='play')return;
-      const key=Array.from(sc.vp).join(',')+'|'+this.board.color.join(',')+'|'+panel.colors.join(',')+'|'+sc.w+','+sc.h;
+      const fading=this.dying.map(t=>t.id+':'+t.center.join(',')+':'+t.scaleMul).join(';');
+      const key=Array.from(sc.vp).join(',')+'|'+this.board.color.join(',')+'|'+panel.colors.join(',')+'|'+sc.w+','+sc.h+'|'+fading;
       if(panel.projectionKey===key)return;
       panel.projectionKey=key;
-      panel.updateProjection(p=>sc.project(p),(id,center)=>{
-        const p=sc.project(center);
+      panel.updateProjection(p=>sc.project(p),(id,center,seamPoint)=>{
+        const p=seamPoint || sc.project(center);
         if(!p)return false;
         const x=p[0]/(sc.w/sc.dpr)*2-1,y=1-p[1]/(sc.h/sc.dpr)*2;
         return Math.abs(x)<=1 && Math.abs(y)<=1 && sc.pick(x,y,this.renderList)===id;
-      });
+      },sc.eye);
     },
 
     updateTimers(dt) {
