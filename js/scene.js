@@ -286,6 +286,7 @@
       // 相机
       this.yaw = 0.62;
       this.pitch = 0.42;
+      this.orbit = null;
       this.dist = 7.2;
       this.fitDist = 7.2;
       this.fov = 45 * Math.PI / 180;
@@ -340,7 +341,31 @@
     }
 
     setCamera(yaw, pitch, dist) {
+      this.orbit = null;
       this.yaw = yaw; this.pitch = pitch; this.dist = dist;
+    }
+
+    rotateOrbit(dx, dy) {
+      if (!this.orbit) {
+        const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
+        this.orbit = {
+          back: [cp * Math.sin(this.yaw), sp, cp * Math.cos(this.yaw)],
+          up: [-sp * Math.sin(this.yaw), cp, -sp * Math.cos(this.yaw)]
+        };
+      }
+      // 始终绕屏幕的竖轴、横轴转，而不是绕固定世界 Y 轴转。
+      const rotate = (vector, axis, angle) => {
+        const c = Math.cos(angle), s = Math.sin(angle), dot = v3.dot(axis, vector);
+        const cross = v3.cross(axis, vector);
+        return vector.map((v, i) => v * c + cross[i] * s + axis[i] * dot * (1 - c));
+      };
+      const o = this.orbit;
+      o.back = rotate(o.back, o.up, -dx * 0.0072);
+      const right = v3.norm(v3.cross(o.up, o.back));
+      o.back = v3.norm(rotate(o.back, right, -dy * 0.0062));
+      o.up = v3.norm(v3.cross(o.back, right));
+      this.yaw = Math.atan2(o.back[0], o.back[2]);
+      this.pitch = Math.asin(MX.clamp(o.back[1], -1, 1));
     }
 
     updateCamera(dt) {
@@ -348,9 +373,10 @@
       if (this.shakeT > 0) this.shakeT = Math.max(0, this.shakeT - dt * 2.6);
 
       const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
-      let ex = this.dist * cp * Math.sin(this.yaw);
-      let ey = this.dist * sp;
-      let ez = this.dist * cp * Math.cos(this.yaw);
+      const back = this.orbit ? this.orbit.back : [cp * Math.sin(this.yaw), sp, cp * Math.cos(this.yaw)];
+      let ex = this.dist * back[0];
+      let ey = this.dist * back[1];
+      let ez = this.dist * back[2];
 
       if (this.shakeT > 0) {
         const s = this.shake * this.shakeT * this.shakeT * 0.35;
@@ -360,7 +386,7 @@
       }
       this.eye = [ex, ey, ez];
       // 上方向随轨道一起转，越过顶底时不会与视线平行或突然翻转。
-      this.up = [-sp * Math.sin(this.yaw), cp, -sp * Math.cos(this.yaw)];
+      this.up = this.orbit ? this.orbit.up.slice() : [-sp * Math.sin(this.yaw), cp, -sp * Math.cos(this.yaw)];
     }
 
     addShake(v) { this.shake = Math.max(this.shake, v); this.shakeT = 1; }

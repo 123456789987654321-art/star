@@ -433,6 +433,7 @@
       this.hintIds = best;
       this.hintTime = 0;
       if (!visible) {
+        this.scene.orbit = null;
         const p = this.tiles[anchor].center;
         const yaw = Math.atan2(p[0], p[2]);
         const pitch = Math.atan2(p[1], Math.hypot(p[0], p[2]));
@@ -535,6 +536,8 @@
     },
 
     resetView() {
+      this.hintCamera = null;
+      this.scene.orbit = null;
       this.scene.yaw = 0.62;
       this.scene.pitch = 0.42;
       this.setZoom(0);
@@ -587,8 +590,7 @@
         if (moved > 7) {
           dragging = true;
           this.clearHover();
-          this.scene.yaw -= dx * 0.0072;
-          this.scene.pitch += dy * 0.0062;
+          this.scene.rotateOrbit(dx, dy);
         }
       });
 
@@ -879,6 +881,7 @@
       document.getElementById('menu').classList.add('hidden');
       document.getElementById('hud').classList.remove('hidden');
       this.setZoom(first ? 0 : this.zoom);
+      this.scene.orbit = null;
       this.scene.yaw = 0.62;
       this.scene.pitch = 0.42;
       this.showBanner();
@@ -899,6 +902,7 @@
 
     toMenu() {
       this.clearHint();
+      this.scene.orbit = null;
       this.state = 'menu';
       this.timer = null;
       this.dying.length = 0;
