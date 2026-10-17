@@ -9,8 +9,23 @@ test('2x3 rotor stays outside the shell and contacts only while its blade reache
   assert.ok(rotor.contacts().length > 0);
   for (let i = 0; i < 6; i++) assert.ok(rotor.center(i)[0] - b.pitch / 2 >= 1 - 1e-8);
   rotor.angle = Math.PI;
-  assert.equal(rotor.contacts().length, 0);
+  assert.ok(rotor.contacts().length > 0);
   assert.equal(rotor.remaining(), 6, 'rotation does not automatically eliminate blocks');
+});
+test('the complete rotating panel stays within the host face at every angle',()=>{
+  for(const n of [5,7]) {
+    const b=new Board(n),r=new Rotor(b);b.color.fill(0);
+    for(let step=0;step<72;step++) {
+      r.angle=step*Math.PI/36;
+      const extent=b.pitch/2*(Math.abs(Math.cos(r.angle))+Math.abs(Math.sin(r.angle)));
+      for(let i=0;i<6;i++) {
+        const p=r.center(i);
+        assert.ok(Math.abs(p[1])+extent<=b.h+1e-8);
+        assert.ok(Math.abs(p[2])+extent<=b.h+1e-8);
+      }
+      assert.equal(new Set(r.contacts().map(p=>p[1])).size,6);
+    }
+  }
 });
 
 test('all six rotor cubes contact the shell at a resting position', () => {

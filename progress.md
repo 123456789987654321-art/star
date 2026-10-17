@@ -5,6 +5,10 @@
 - Last published commit: 188f039 (camera-relative orbit).
 # Completion update
 
+- Replaced tunnel class, application paths and obsolete tests with fixed perspective panel, visible convex-hull edge contacts and cached view checks.
+- Centred rotor pivot and geometry; complete revolution containment regression passes at 5 and 7.
+- Review caught shallow silhouette overlap accepted as seam. Added failing regression, then separated pixel alignment allowance from numerical overlap rejection.
+
 - Test-only 7x7: generalized tunnel bounds and geometry by board pitch, moved initial wildcards to inner arm ends; added four-outlet and exit regression. Rotor contact tested at sizes 5 and 7.
 
 - Latest revision: levels 1/2/3 normal/rotor/tunnel, three independent test buttons; score isolation and same-level restart verified in Edge.

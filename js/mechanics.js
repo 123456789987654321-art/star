@@ -4,88 +4,12 @@
   const profiles = {
     1: { size: 5, kind: 'normal', title: '经典消除' },
     2: { size: 5, kind: 'rotor', title: '旋转方板' },
-    3: { size: 5, kind: 'tunnel', title: '十字通道' }
+    3: { size: 5, kind: 'perspective', title: '视角拼接' }
   };
   g.LevelProfile = level => {
     const p = profiles[level] || { size: 5, kind: 'normal', title: '经典消除' };
     return { ...p, size: Math.min(8, p.size) };
   };
-
-  class CrossTunnel {
-    constructor(board) {
-      this.board = board;
-      this.exitStep = (board.N - 1) / 2;
-      this.innerStep = this.exitStep - 1;
-      this.gates = [{ open: false, progress: 0 }, { open: false, progress: 0 }];
-      this.pieces = [[-this.innerStep, 0], [0, this.innerStep]].map((cell, gate) => ({ cell, position: cell.slice(), gate, next: null, progress: 0, exited: false }));
-    }
-    remaining() { return this.pieces.filter(p => !p.exited).length; }
-    center(i) { return [this.pieces[i].position[0] * this.board.pitch, this.pieces[i].position[1] * this.board.pitch, 0]; }
-    contacts() {
-      const result = [], p = this.board.pitch;
-      const touching = (a, b) => {
-        const d = a.map((v, axis) => Math.abs(v - b[axis]));
-        return d.some((v, axis) => Math.abs(v - p) < 1e-5 && d.every((q, other) => other === axis || q < p - 1e-5));
-      };
-      this.pieces.forEach((piece, i) => {
-        if (piece.exited) return;
-        const a = this.center(i), id = this.board.size + i;
-        for (let j = 0; j < this.board.size; j++) if (this.board.color[j] >= 0 && touching(a, this.board.cellCenter(j))) result.push([j, id]);
-        for (let j = i + 1; j < this.pieces.length; j++) if (!this.pieces[j].exited && touching(a, this.center(j))) result.push([id, this.board.size + j]);
-      });
-      return result;
-    }
-    openGate(index) {
-      if (!this.gates[index] || this.gates[index].open) return false;
-      this.gates[index].open = true;
-      return true;
-    }
-    exitId(x, y) {
-      const target = [x * this.board.pitch, y * this.board.pitch, 0];
-      return this.board.cells.findIndex((_, id) => this.board.cellCenter(id).every((v, a) => Math.abs(v - target[a]) < 1e-6));
-    }
-    update(dt, gravity) {
-      const arrivals = [];
-      this.gates.forEach(gate => { if (gate.open) gate.progress = Math.min(1, gate.progress + dt * 3); });
-      for (const piece of this.pieces) {
-        if (piece.exited || this.gates[piece.gate].progress < 1) continue;
-        if (!piece.next) {
-          const candidates = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-            .map(d => ({ q: [piece.cell[0] + d[0], piece.cell[1] + d[1]], force: d[0] * gravity[0] + d[1] * gravity[1] }))
-            .filter(c => c.force > 0.15 && Math.max(Math.abs(c.q[0]), Math.abs(c.q[1])) <= this.exitStep && (c.q[0] === 0 || c.q[1] === 0))
-            .sort((a, b) => b.force - a.force);
-          for (const c of candidates) {
-            const occupied = this.pieces.some(other => other !== piece && !other.exited &&
-              [other.cell, other.next].some(p => p && p[0] === c.q[0] && p[1] === c.q[1]));
-            if (occupied) continue;
-            const exit = Math.max(Math.abs(c.q[0]), Math.abs(c.q[1])) === this.exitStep;
-            const id = exit ? this.exitId(...c.q) : -1;
-            if (exit && (id < 0 || this.board.color[id] >= 0)) continue;
-            piece.next = c.q; piece.progress = 0;
-            break;
-          }
-        }
-        if (!piece.next) continue;
-        piece.progress = Math.min(1, piece.progress + dt * 3.5);
-        piece.position = piece.cell.map((v, a) => v + (piece.next[a] - v) * piece.progress);
-        if (piece.progress < 1) continue;
-        const exit = Math.max(...piece.next.map(Math.abs)) === this.exitStep;
-        const id = exit ? this.exitId(...piece.next) : -1;
-        if (exit && this.board.color[id] >= 0) {
-          piece.position = piece.cell.slice(); piece.next = null; continue;
-        }
-        piece.cell = piece.next; piece.next = null;
-        if (exit) {
-          piece.exited = true;
-          this.board.color[id] = 6;
-          this.board.covered[id] = 0;
-          arrivals.push({ id, piece });
-        }
-      }
-      return arrivals;
-    }
-  }
-  g.CrossTunnel = CrossTunnel;
 
   class Rotor {
     constructor(board, rnd = Math.random) {
@@ -95,7 +19,7 @@
       this.holdDuration = 2.4;
       this.turnDuration = 0.8;
       this.colors = Int8Array.from({ length: 6 }, () => (rnd() * 6) | 0);
-      this.pivot = [board.h + board.pitch / 2, board.h, board.pitch / 2];
+      this.pivot = [board.h + board.pitch / 2, 0, 0];
     }
     update(dt) {
       const cycle = this.holdDuration + this.turnDuration;
@@ -107,7 +31,7 @@
       this.angle = (step + eased) * Math.PI / 2;
     }
     center(i) {
-      const p = this.board.pitch, y = -(Math.floor(i / 2) + 0.5) * p, z = (i % 2 - 0.5) * p;
+      const p = this.board.pitch, y = (1 - Math.floor(i / 2)) * p, z = (i % 2 - 0.5) * p;
       const c = Math.cos(this.angle), s = Math.sin(this.angle);
       return [this.pivot[0], this.pivot[1] + c * y - s * z, this.pivot[2] + s * y + c * z];
     }
@@ -145,4 +69,71 @@
     remaining() { return this.colors.filter(c => c >= 0).length; }
   }
   g.Rotor = Rotor;
+  class PerspectivePanel extends Rotor {
+    constructor(board, rnd = Math.random) {
+      super(board, rnd);
+      this.projected = true;
+      this.links = [];
+    }
+    update() {} // The panel stays in world space; only the player's view moves.
+    center(i) {
+      const p = this.board.pitch;
+      return [this.board.h + p/2 + 1.2 + (i%2)*p, (1-Math.floor(i/2))*p, -0.8];
+    }
+    basis() { return [1,0,0,0,1,0,0,0,1]; }
+    contacts() { return this.links; }
+    static hull(points) {
+      const sorted = points.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+      const cross = (a,b,c)=>(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+      const half = list => { const out=[]; for(const p of list) { while(out.length>1&&cross(out[out.length-2],out[out.length-1],p)<=0)out.pop();out.push(p); }out.pop();return out; };
+      return half(sorted).concat(half(sorted.slice().reverse()));
+    }
+    static edgesJoin(a,b) {
+      if(a.length<3||b.length<3)return false;
+      for(let i=0;i<a.length;i++) {
+        const p=a[i],q=a[(i+1)%a.length],len=Math.hypot(q[0]-p[0],q[1]-p[1]);
+        if(len<3)continue;
+        const u=[(q[0]-p[0])/len,(q[1]-p[1])/len],n=[-u[1],u[0]];
+        const along=v=>(v[0]-p[0])*u[0]+(v[1]-p[1])*u[1];
+        const across=v=>(v[0]-p[0])*n[0]+(v[1]-p[1])*n[1];
+        for(let j=0;j<b.length;j++) {
+          const r=b[j],s=b[(j+1)%b.length],other=Math.hypot(s[0]-r[0],s[1]-r[1]);
+          if(other<3)continue;
+          // Clockwise hulls must have opposing parallel edges at a seam.
+          if(((s[0]-r[0])*u[0]+(s[1]-r[1])*u[1])/other> -0.985)continue;
+          const tolerance=1.5; // Small pixel allowance for hand-controlled alignment.
+          if(Math.max(Math.abs(across(r)),Math.abs(across(s)))>tolerance)continue;
+          const overlap=Math.min(len,Math.max(along(r),along(s)))-Math.max(0,Math.min(along(r),along(s)));
+          if(overlap<Math.min(len,other)*0.65)continue;
+          // The two silhouettes must lie on opposite sides, not overlap.
+          if(Math.max(...b.map(across))>1e-5)continue;
+          return true;
+        }
+      }
+      return false;
+    }
+    updateProjection(project, visible) {
+      const b=this.board,half=b.pitch/2;
+      const polygon=center=>{
+        const points=[];
+        for(const x of [-half,half])for(const y of [-half,half])for(const z of [-half,half]) {
+          const p=project([center[0]+x,center[1]+y,center[2]+z]);
+          if(!p||!p.every(Number.isFinite))return [];
+          points.push(p);
+        }
+        return PerspectivePanel.hull(points);
+      };
+      const surface=b.cells.map((_,id)=>b.color[id]>=0?polygon(b.cellCenter(id)):null);
+      const links=[],seen=new Map();
+      const canSee=(id,center)=>{if(!seen.has(id))seen.set(id,visible(id,center));return seen.get(id);};
+      for(let i=0;i<6;i++) {
+        if(this.colors[i]<0)continue;
+        const id=b.size+i,center=this.center(i),shape=polygon(center);
+        if(!canSee(id,center))continue;
+        for(let j=0;j<b.size;j++)if(surface[j]&&PerspectivePanel.edgesJoin(shape,surface[j])&&canSee(j,b.cellCenter(j)))links.push([j,id]);
+      }
+      this.links=links;
+    }
+  }
+  g.PerspectivePanel = PerspectivePanel;
 })(typeof window !== 'undefined' ? window : globalThis);

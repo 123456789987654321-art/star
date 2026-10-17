@@ -17,7 +17,7 @@ test('定位键将六个面的箭头分别转向屏幕下方，保留缩放', ()
   }
 });
 test('关卡依次为普通、方板、通道，目标分递增', () => {
-  assert.deepEqual([1,2,3,4].map(n => ctx.LevelProfile(n).kind), ['normal','rotor','tunnel','normal']);
+  assert.deepEqual([1,2,3,4].map(n => ctx.LevelProfile(n).kind), ['normal','rotor','perspective','normal']);
   for (let n = 1; n <= 4; n++) {
     assert.equal(ctx.LevelProfile(n).size, 5);
     assert.ok(ctx.App.targetFor(n + 1, 98) > ctx.App.targetFor(n, 98));

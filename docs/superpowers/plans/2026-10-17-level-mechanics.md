@@ -1,5 +1,7 @@
 # Level mechanics implementation plan
 
+Superseding user revision: replace tunnel and grey wildcard with fixed 2x3 PerspectivePanel beside the main board. Only visible projected edges that line up and meet connect same colors, never overlapping silhouettes; click still required. Levels normal/rotor/perspective, test boards remain 7x7. Rotor pivot centred so full panel footprint stays inside the host face through the full turn. Validation: hull geometry, shallow-overlap regression, fixed positions, 5/7 rotor containment, browser view scan and actual cross-board click.
+
 Latest scope: ordinary/rotor/tunnel are levels 1/2/3 and independently selectable test levels. Rotor must hold 2.4s and turn 90 degrees over 0.8s, all six cubes contacting at rest. Channel walls transparent and click-through. Internal wildcard contact creates a selectable group, never automatic removal. Future reachable contacts must prevent premature settlement. Verified with rule tests and Edge interaction.
 
 Superseding revision: black coating cancelled by user. Level 2 is now ordinary 5x5; rotor stays level 3, tunnel stays level 4. Earlier coating requirements below are historical.

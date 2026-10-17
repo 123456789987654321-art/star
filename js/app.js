@@ -36,7 +36,6 @@
     timeLeft: 0,
     tilesAll: 0,
     board: null,
-    tunnel: null,
     rotor: null,
     scene: null,
     tiles: null,          // 按格 id 索引
@@ -164,14 +163,14 @@
       if (id < this.board.size) return this.board.colorOf(id);
       const index = id - this.board.size;
       if (this.rotor) return this.rotor.colors[index] ?? -1;
-      return this.tunnel && this.tunnel.pieces[index] && !this.tunnel.pieces[index].exited ? 6 : -1;
+      return -1;
     },
-    remainingCount() { return this.board.aliveCount() + (this.tunnel ? this.tunnel.remaining() : 0) + (this.rotor ? this.rotor.remaining() : 0); },
+    remainingCount() { return this.board.aliveCount() + (this.rotor ? this.rotor.remaining() : 0); },
     groupAt(id) {
-      if (!this.rotor && !this.tunnel) return this.board.groupOf(id);
+      if (!this.rotor) return this.board.groupOf(id);
       const c = this.colorAt(id);
       if (c < 0 || this.board.covered[id]) return [];
-      const contacts = (this.rotor || this.tunnel).contacts();
+      const contacts = this.rotor.contacts();
       const run = color => {
         const out = [], stack = [id], seen = new Set([id]);
         while (stack.length) {
@@ -186,10 +185,15 @@
     },
     hasPotentialMoves() {
       if (this.board.hasMoves()) return true;
-      if (this.tunnel && this.tunnel.remaining()) {
-        // Every arm reaches an outlet: an empty outlet allows exit, an occupied
-        // one allows a wildcard match. A centre piece is not a dead end.
-        return true;
+      if (this.rotor && this.rotor.projected) {
+        for(let i=0;i<6;i++) {
+          const color=this.rotor.colors[i];
+          if(color<0)continue;
+          if(this.rotor.neighbors(i).some(j=>this.rotor.colors[j]===color))return true;
+          // Matching colors may be joined by a future view, even if currently apart.
+          if(this.board.color.includes(color))return true;
+        }
+        return false;
       }
       if (this.rotor && this.rotor.remaining()) {
         const saved = this.rotor.angle;
@@ -217,34 +221,6 @@
           if (this.hintIds && this.hintIds.some(id => id >= this.board.size)) this.clearHint();
         }
       }
-      if (this.tunnel && this.state === 'play') {
-        const arrivals = this.tunnel.update(dt, this.scene.up.map(v => -v));
-        this.syncTunnelTiles();
-        const signature = JSON.stringify(this.tunnel.contacts());
-        if (signature !== this.tunnelContactKey) {
-          this.tunnelContactKey = signature; this.clearHover();
-          if (this.hintIds && this.hintIds.some(id => id >= this.board.size)) this.clearHint();
-        }
-        if (arrivals.length) {
-          this.clearHint(); this.clearHover();
-          arrivals.forEach(({ id }) => { this.tiles[id] = this.makeTile(id, 6); });
-          this.settle();
-        }
-      }
-    },
-    syncTunnelTiles() {
-      if (!this.tunnel) return;
-      this.tunnel.pieces.forEach((piece, i) => {
-        const id = this.board.size + i;
-        if (piece.exited) { this.tiles[id] = null; return; }
-        let tile = this.tiles[id];
-        if (!tile) {
-          tile = this.makeTile(0, 6); tile.id = id; tile.external = true; tile.mechanic = 'tunnel';
-          tile.homeBasis = [1,0,0,0,1,0,0,0,1]; tile.basis = tile.homeBasis.slice();
-          this.tiles[id] = tile;
-        }
-        tile.center = this.tunnel.center(i);
-      });
     },
     tileGeom() {
       const p = this.board.pitch;
@@ -286,7 +262,7 @@
     spawnTilesInstant() {
       const b = this.board;
       this.tiles = new Array(b.size).fill(null);
-      this.tilesAll = b.size + (this.tunnel ? 2 : this.rotor ? 6 : 0);
+      this.tilesAll = b.size + (this.rotor ? 6 : 0);
       for (let id = 0; id < b.size; id++) {
         if (b.color[id] >= 0) this.tiles[id] = this.makeTile(id, b.color[id]);
       }
@@ -300,7 +276,7 @@
       const waveOf = { 5: 0, 0: 1, 1: 1, 2: 1, 3: 1, 4: 2 };
 
       this.tiles = new Array(b.size).fill(null);
-      this.tilesAll = b.size + (this.tunnel ? 2 : this.rotor ? 6 : 0);
+      this.tilesAll = b.size + (this.rotor ? 6 : 0);
       this.dying.length = 0;
 
       for (let id = 0; id < b.size; id++) {
@@ -355,6 +331,21 @@
 
       this.buildRenderList();
       this.render();
+      this.updatePerspectiveContacts();
+    },
+
+    updatePerspectiveContacts() {
+      const panel=this.rotor,sc=this.scene;
+      if(!panel || !panel.projected || this.state!=='play')return;
+      const key=Array.from(sc.vp).join(',')+'|'+this.board.color.join(',')+'|'+panel.colors.join(',')+'|'+sc.w+','+sc.h;
+      if(panel.projectionKey===key)return;
+      panel.projectionKey=key;
+      panel.updateProjection(p=>sc.project(p),(id,center)=>{
+        const p=sc.project(center);
+        if(!p)return false;
+        const x=p[0]/(sc.w/sc.dpr)*2-1,y=1-p[1]/(sc.h/sc.dpr)*2;
+        return Math.abs(x)<=1 && Math.abs(y)<=1 && sc.pick(x,y,this.renderList)===id;
+      });
     },
 
     updateTimers(dt) {
@@ -504,7 +495,7 @@
       this.clearHover();
       const seen = new Set();
       let best = null, anchor = -1, bestRank = -1, visible = false;
-      for (let id = 0; id < this.board.size + (this.rotor ? 6 : this.tunnel ? 2 : 0); id++) {
+      for (let id = 0; id < this.board.size + (this.rotor ? 6 : 0); id++) {
         if (seen.has(id) || this.colorAt(id) < 0) continue;
         const group = this.groupAt(id);
         group.forEach(member => seen.add(member));
@@ -522,7 +513,7 @@
         if (rank > bestRank) { best = group; anchor = front >= 0 ? front : group[0]; bestRank = rank; visible = front >= 0; }
       }
       const status = document.getElementById('hintStatus');
-      if (!best) { status.textContent = this.tunnel ? '清出通道出口，点击金色挡板，再转动立方体引导灰色问号块' : this.rotor ? '暂时没有组合，等待旋转方板接触主体后再试' : '当前没有可以消除的方块'; return; }
+      if (!best) { status.textContent = this.rotor && this.rotor.projected ? '转动视角，让固定方板和主体的同色块在画面上边缘对齐' : this.rotor ? '暂时没有组合，等待旋转方板接触主体后再试' : '当前没有可以消除的方块'; return; }
       this.hintIds = best;
       this.hintTime = 0;
       if (!visible) {
@@ -594,27 +585,6 @@
       };
       if (this.tiles) for (let i = 0; i < this.tiles.length; i++) if (this.tiles[i]) add(this.tiles[i]);
       for (let i = 0; i < this.dying.length; i++) add(this.dying[i]);
-      if (this.tunnel && ['play', 'busy', 'intro', 'paused'].includes(this.state)) {
-        const box = (id, center, size, rgb, mark = 0) => {
-          const basis = [1,0,0,0,1,0,0,0,1], model = m4.create();
-          m4.fromBasisScale(model, basis, center, size);
-          list.push({ id, center, size, basis, model, rgb, mark, special: true, alpha: id === -10 ? 0.12 : 1, pickThrough: id === -10, highlight: 0 });
-        };
-        const metal = [0.18,0.34,0.46];
-        const p = this.board.pitch, end = this.tunnel.exitStep * p;
-        const width = p * 1.1, wall = p * 0.0875, depth = p * 1.1;
-        box(-10, [0,0,-p*0.575], [end*2,width,p*0.1], metal);
-        box(-10, [0,0,-p*0.575], [width,end*2,p*0.1], metal);
-        const armLength = end - width/2, armCenter = (end + width/2)/2;
-        for (const sign of [-1,1]) for (const side of [-1,1]) {
-          box(-10, [sign*armCenter,side*p*0.575,0], [armLength,wall,depth], metal);
-          box(-10, [side*p*0.575,sign*armCenter,0], [wall,armLength,depth], metal);
-        }
-        this.tunnel.gates.forEach((gate, i) => {
-          const offset = (this.tunnel.innerStep-0.5)*p, drop = gate.progress*p*1.5;
-          if (gate.progress < 1) box(-100-i, i ? [0,offset-drop,0] : [-offset,-drop,0], i ? [p,p*0.125,p] : [p*0.125,p,p], [0.95,0.64,0.18]);
-        });
-      }
     },
 
     render() {
@@ -794,7 +764,6 @@
         -((e.clientY / window.innerHeight) * 2 - 1),
         this.renderList
       );
-      if (this.tunnel && (id === -100 || id === -101)) { this.tunnel.openGate(-100 - id); return; }
       if (id < 0) return;
       const grp = this.groupAt(id);
       if (grp.length < 2) {
@@ -843,8 +812,7 @@
         t.highlight = 0;
         this.dying.push(t);
         this.tiles[id] = null;
-        if (t.mechanic === 'tunnel') this.tunnel.pieces[id - this.board.size].exited = true;
-        else if (t.external) this.rotor.colors[id - this.board.size] = -1;
+        if (t.external) this.rotor.colors[id - this.board.size] = -1;
         else this.board.remove([id]);
 
         this.scene.particles.burst(t.center, PALETTE[t.color].rgb, n >= 10 ? 12 : 7, {
@@ -904,14 +872,6 @@
       this.levelRemain = remain;
       window.Sfx.levelClear();
       this.scene.addShake(0.6);
-      if (this.tunnel) this.tunnel.pieces.forEach((piece, i) => {
-        if (piece.exited) return;
-        const tile = this.makeTile(0, 6);
-        tile.id = this.board.size + i; tile.external = true;
-        tile.center = [piece.position[0] * this.board.pitch, piece.position[1] * this.board.pitch, 0];
-        this.tiles[tile.id] = tile;
-      });
-
       // 剩余孤块只参与收尾烟花，保留棋盘计数用于结算，不追加消除分。
       const leftovers = this.tiles.filter(Boolean);
       leftovers.forEach((tile, i) => {
@@ -1015,8 +975,7 @@
       this.board = new window.Board(N);
       this.board.fillRandom(NC, Math.random);
       const profile = window.LevelProfile(this.level);
-      this.tunnel = profile.kind === 'tunnel' ? new window.CrossTunnel(this.board) : null;
-      this.rotor = profile.kind === 'rotor' ? new window.Rotor(this.board) : null;
+      this.rotor = profile.kind === 'rotor' ? new window.Rotor(this.board) : profile.kind === 'perspective' ? new window.PerspectivePanel(this.board) : null;
       this.tilesAll = this.board.size;
       this.target = this.targetFor(this.level, this.board.size);
       this.dying.length = 0;
@@ -1026,7 +985,6 @@
       this.lastTickSec = -1;
       this.scene.particles.clear();
       this.spawnTilesFalling(!first);
-      this.syncTunnelTiles();
       if (this.rotor) for (let i = 0; i < 6; i++) {
         const tile = this.makeTile(0, this.rotor.colors[i]);
         tile.id = this.board.size + i; tile.external = true;
@@ -1059,7 +1017,6 @@
     toMenu() {
       this.clearHint();
       this.scene.orbit = null;
-      this.tunnel = null;
       this.rotor = null;
       this.state = 'menu';
       this.timer = null;
@@ -1195,7 +1152,7 @@
           <ul>
             <li>第 1 关：普通 5×5 消除。菜单的「关卡测试」可以独立体验三种 7×7 关卡，机关按格子尺寸适配。</li>
             <li>第 2 关：2×3 旋转方板，停 2.4 秒、转 90°，六个方块都能接触主体，同色组合仍需点击消除。</li>
-            <li>第 3 关：透明十字通道，点击金色挡板后，转动整体引导灰色问号块。问号块接触彩块后形成组合，仍需点击才消除；出口空着时也可滑入表面。</li>
+            <li>第 3 关：旁边固定的 2×3 方板。拖动视角，让它与主体的同色方块在画面中边缘对齐相接，然后点击组合消除。单纯重叠不算拼接。</li>
           </ul>
         </div>
         <div class="ov-actions" style="margin-top:18px">
