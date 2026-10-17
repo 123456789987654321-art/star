@@ -6,7 +6,11 @@
     2: { size: 5, kind: 'rotor', title: '旋转方板' },
     3: { size: 5, kind: 'perspective', title: '视角拼接' }
   };
-  g.LevelProfile = level => {
+  g.LevelProfile = (level, mode) => {
+    if(mode==='normal') {
+      const n=Math.max(1,Math.min(15,Math.floor(level)));
+      return {...profiles[(n-1)%3+1],size:5+Math.floor((n-1)/3)};
+    }
     const p = profiles[level] || { size: 5, kind: 'normal', title: '经典消除' };
     return { ...p, size: Math.min(8, p.size) };
   };

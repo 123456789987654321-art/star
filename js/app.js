@@ -142,7 +142,7 @@
     /* ---------- 关卡参数 ---------- */
     cubeSizeFor(mode, level) {
       if (mode === 'test') return 7;
-      return window.LevelProfile(level).size;
+      return window.LevelProfile(level,mode).size;
     },
     targetFor(level, tiles) {
       // 沿用每块的目标分比例，按实际外壳块数缩放。
@@ -933,6 +933,10 @@
       }
       const passed = this.score >= this.target;
       if (!passed) { this.gameOver('分数不足'); return; }
+      if(this.mode==='normal'&&this.level===15) {
+        this.overlay(`<div class="ov-emoji">🎉</div><h2 class="ov-title win">普通模式全部通关</h2><p class="ov-sub">完成 15 关 · 总分 ${this.score}</p><div class="ov-actions"><button class="ov-btn" data-act="menu">返回菜单选关</button></div>`);
+        return;
+      }
       const nextN = this.cubeSizeFor(this.mode, this.level + 1);
       const nextTiles = nextN ** 3 - (nextN - 2) ** 3;
       this.overlay(`
@@ -1004,19 +1008,21 @@
     },
     showLevelSelect(mode) {
       this.selectMode=mode;
-      const p=this.progressFor(mode),count=Math.max(12,p.next+3);
+      const p=this.progressFor(mode),count=mode==='normal'?15:Math.max(12,p.next+3);
       let buttons='';
       for(let level=1;level<=count;level++) {
         const cleared=Object.prototype.hasOwnProperty.call(p.cleared,level);
         const unlocked=cleared||level===p.next;
+        const profile=window.LevelProfile(level,mode);
         const label=cleared?'已通关':unlocked?'可挑战':'🔒';
-        buttons+=`<button class="level-choice ${unlocked?'passed':'locked'}" ${unlocked?`data-act="selectLevel" data-level="${level}"`:'disabled'} aria-label="第 ${level} 关，${unlocked?label:'未解锁'}">${level}<small>${label}</small></button>`;
+        buttons+=`<button class="level-choice ${unlocked?'passed':'locked'}" ${unlocked?`data-act="selectLevel" data-level="${level}"`:'disabled'} aria-label="第 ${level} 关，${profile.size}乘${profile.size}，${profile.title}，${unlocked?label:'未解锁'}">${level}<small>${profile.size}×${profile.size}</small><small>${profile.title}</small><small>${label}</small></button>`;
       }
-      this.overlay(`<h2 class="ov-title">${mode==='normal'?'普通模式':'挑战模式'} · 选关</h2><p class="ov-sub">彩色关卡可进入 · 通关后解锁下一关</p><div class="level-grid">${buttons}</div><div class="ov-actions"><button class="ov-btn" data-act="continueLevels">${p.next===1?'开始闯关':'继续闯关'} · 第 ${p.next} 关</button><button class="ov-btn plain" data-act="helpClose">返回菜单</button></div>`);
+      const continuation=mode==='normal'&&p.next>15?'<p class="ov-sub">15 关已全部通关，可选择关卡重玩</p>':`<button class="ov-btn" data-act="continueLevels">${p.next===1?'开始闯关':'继续闯关'} · 第 ${p.next} 关</button>`;
+      this.overlay(`<h2 class="ov-title">${mode==='normal'?'普通模式':'挑战模式'} · 选关</h2><p class="ov-sub">彩色关卡可进入 · 通关后解锁下一关</p><div class="level-grid">${buttons}</div><div class="ov-actions">${continuation}<button class="ov-btn plain" data-act="helpClose">返回菜单</button></div>`);
     },
     startSelectedLevel(mode,level,continuing=false) {
       const p=this.progressFor(mode);
-      if(!Number.isSafeInteger(level)||!(Object.prototype.hasOwnProperty.call(p.cleared,level)||level===p.next))return;
+      if(!Number.isSafeInteger(level)||(mode==='normal'&&level>15)||!(Object.prototype.hasOwnProperty.call(p.cleared,level)||level===p.next))return;
       this.mode=mode;this.level=level;
       this.score=level===p.next?p.score:p.cleared[level];
       this.entryScore=this.score;this.newRecord=false;this.startLevel(true);
@@ -1038,7 +1044,7 @@
       this.board = new window.Board(N);
       this.mainMatcher=null;this.viewLinks=[];
       this.board.fillRandom(NC, Math.random);
-      const profile = window.LevelProfile(this.level);
+      const profile = window.LevelProfile(this.level,this.mode);
       this.rotor = profile.kind === 'rotor' ? new window.Rotor(this.board) : profile.kind === 'perspective' ? new window.PerspectivePanel(this.board) : null;
       this.tilesAll = this.board.size;
       this.target = this.targetFor(this.level, this.board.size);
@@ -1069,7 +1075,7 @@
     showBanner() {
       const b = document.getElementById('banner');
       b.innerHTML = '<div class="bn-lv">第 ' + this.level + ' 关</div>' +
-        '<div class="bn-sub">' + window.LevelProfile(this.level).title + ' · 目标 ' + this.target + ' 分' +
+        '<div class="bn-sub">' + window.LevelProfile(this.level,this.mode).title + ' · '+this.N+'×'+this.N+' · 目标 ' + this.target + ' 分' +
         (this.mode === 'challenge' ? ' · 限时' : '') + '</div>';
       b.classList.remove('show');
       void b.offsetWidth;          // 强制重排，让动画能重播

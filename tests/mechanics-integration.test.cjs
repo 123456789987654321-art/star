@@ -116,3 +116,13 @@ for(const mode of ['normal','challenge'])test(`${mode}: first and next available
   a.startSelectedLevel(mode,2);assert.equal(starts,2);assert.equal(a.score,900);
   a.startSelectedLevel(mode,3);assert.equal(starts,2);
 });
+
+test('normal campaign stops at 15 and keeps completed levels replayable',()=>{
+  const {a}=fixture();let html='';a.overlay=s=>html=s;
+  a.progressCache={normal:{next:16,score:90000,cleared:{15:80000}}};
+  a.showLevelSelect('normal');assert.equal((html.match(/class="level-choice /g)||[]).length,15);
+  assert.doesNotMatch(html,/data-act="continueLevels"/);
+  a.startLevel=()=>assert.fail('level 16 must not start');a.startSelectedLevel('normal',16,true);
+  a.mode='normal';a.level=15;a.score=90000;a.target=85000;a.showClearPanel();
+  assert.doesNotMatch(html,/data-act="next"/);
+});

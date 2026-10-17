@@ -2,6 +2,17 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 require('../js/board.js');
 require('../js/mechanics.js');
+
+test('normal campaign has five sizes with three mechanics per size',()=>{
+  const kinds=['normal','rotor','perspective'];
+  for(let level=1;level<=15;level++) {
+    const profile=LevelProfile(level,'normal');
+    assert.equal(profile.size,5+Math.floor((level-1)/3));
+    assert.equal(profile.kind,kinds[(level-1)%3]);
+  }
+  assert.equal(LevelProfile(4,'challenge').size,5);
+  assert.equal(LevelProfile(4,'challenge').kind,'normal');
+});
 test('2x3 rotor stays outside the shell and contacts only while its blade reaches the side', () => {
   const b = new Board(5); b.color.fill(0);
   const rotor = new Rotor(b, () => 0);
@@ -46,7 +57,7 @@ test('rotor holds for 2.4 seconds then turns a quarter turn over 0.8 seconds', (
 });
 
 test('panel rests flush with top right bottom left edges clockwise as seen from outside +X',()=>{
-  for(const size of [5,7]) {
+  for(const size of [5,6,7,8,9]) {
     const b=new Board(size),r=new Rotor(b);
     for(let step=0;step<4;step++) {
       r.angle=step*Math.PI/2;
@@ -61,7 +72,7 @@ test('panel rests flush with top right bottom left edges clockwise as seen from 
 });
 
 test('every stopped panel cube aligns with exactly one host grid cell',()=>{
-  for(const size of [5,7]) {
+  for(const size of [5,6,7,8,9]) {
     const b=new Board(size),r=new Rotor(b);b.color.fill(0);
     for(let step=0;step<4;step++) {
       r.angle=step*Math.PI/2;
