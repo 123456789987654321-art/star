@@ -169,7 +169,7 @@
     },
     remainingCount() { return this.board.aliveCount() + (this.rotor ? this.rotor.remaining() : 0); },
     groupAt(id) {
-      if (!this.rotor && !this.viewLinks.length) return this.board.groupOf(id);
+      if (!this.rotor) return this.board.groupOf(id);
       const c = this.colorAt(id);
       if (c < 0 || this.board.covered[id]) return [];
       const contacts = (this.rotor ? this.rotor.contacts() : []).concat(this.rotor&&!this.rotor.projected?[]:this.viewLinks);
@@ -188,17 +188,18 @@
     hasPotentialMoves() {
       if (this.board.hasMoves()) return true;
       const colors=new Set();
-      for(const color of (this.rotor&&!this.rotor.projected?[]:this.board.color))if(color>=0) {
+      for(const color of (this.rotor&&this.rotor.projected?this.board.color:[]))if(color>=0) {
         if(colors.has(color))return true; // A future view can join separated same-color blocks.
         colors.add(color);
       }
       if (this.rotor && this.rotor.projected) {
-        for(let i=0;i<6;i++) {
+        for(let i=0;i<this.rotor.colors.length;i++) {
           const color=this.rotor.colors[i];
           if(color<0)continue;
           if(this.rotor.neighbors(i).some(j=>this.rotor.colors[j]===color))return true;
           // Matching colors may be joined by a future view, even if currently apart.
           if(this.board.color.includes(color))return true;
+          if(this.rotor.colors.some((c,j)=>Math.floor(j/6)!==Math.floor(i/6)&&c===color))return true;
         }
         return false;
       }
@@ -207,7 +208,7 @@
         let possible = false;
         for (let step = 0; step < 48 && !possible; step++) {
           this.rotor.angle = step * Math.PI / 24;
-          for (let i = 0; i < 6; i++) if (this.rotor.colors[i] >= 0 && this.groupAt(this.board.size + i).length >= 2) { possible = true; break; }
+          for (let i = 0; i < this.rotor.colors.length; i++) if (this.rotor.colors[i] >= 0 && this.groupAt(this.board.size + i).length >= 2) { possible = true; break; }
         }
         this.rotor.angle = saved;
         return possible;
@@ -217,10 +218,10 @@
     updateMechanics(dt) {
       if (this.rotor && ['play', 'busy'].includes(this.state)) {
         this.rotor.update(dt);
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < this.rotor.colors.length; i++) {
           const tile = this.tiles[this.board.size + i];
           if (!tile) continue;
-          tile.center = this.rotor.center(i); tile.basis = this.rotor.basis(); tile.homeBasis = tile.basis.slice();
+          tile.center = this.rotor.center(i); tile.basis = this.rotor.basis(i); tile.homeBasis = tile.basis.slice();
         }
         const signature = JSON.stringify(this.rotor.contacts());
         if (this.rotorContactKey !== signature) {
@@ -269,7 +270,7 @@
     spawnTilesInstant() {
       const b = this.board;
       this.tiles = new Array(b.size).fill(null);
-      this.tilesAll = b.size + (this.rotor ? 6 : 0);
+      this.tilesAll = b.size + (this.rotor ? this.rotor.colors.length : 0);
       for (let id = 0; id < b.size; id++) {
         if (b.color[id] >= 0) this.tiles[id] = this.makeTile(id, b.color[id]);
       }
@@ -283,7 +284,7 @@
       const waveOf = { 5: 0, 0: 1, 1: 1, 2: 1, 3: 1, 4: 2 };
 
       this.tiles = new Array(b.size).fill(null);
-      this.tilesAll = b.size + (this.rotor ? 6 : 0);
+      this.tilesAll = b.size + (this.rotor ? this.rotor.colors.length : 0);
       this.dying.length = 0;
 
       for (let id = 0; id < b.size; id++) {
@@ -344,14 +345,8 @@
     updatePerspectiveContacts() {
       const sc=this.scene;
       if(!this.board || this.state!=='play')return;
-      if(this.rotor&&!this.rotor.projected) { this.viewLinks=[];this.mainMatcher=null;return; }
-      let panel=this.rotor;
-      if(!panel || !panel.projected) {
-        if(!this.mainMatcher || this.mainMatcher.board!==this.board) {
-          this.mainMatcher=new window.PerspectivePanel(this.board);this.mainMatcher.colors.fill(-1);
-        }
-        panel=this.mainMatcher;
-      }
+      if(!this.rotor||!this.rotor.projected) { this.viewLinks=[];this.mainMatcher=null;return; }
+      const panel=this.rotor;
       const fading=this.dying.map(t=>t.id+':'+t.center.join(',')+':'+t.scaleMul).join(';');
       const rotorKey=this.rotor?this.rotor.angle+':'+this.rotor.colors.join(','):'';
       const key=Array.from(sc.vp).join(',')+'|'+this.board.color.join(',')+'|'+panel.colors.join(',')+'|'+sc.w+','+sc.h+'|'+fading+'|'+rotorKey;
@@ -522,7 +517,7 @@
       this.clearHover();
       const seen = new Set();
       let best = null, anchor = -1, bestRank = -1, visible = false;
-      for (let id = 0; id < this.board.size + (this.rotor ? 6 : 0); id++) {
+      for (let id = 0; id < this.board.size + (this.rotor ? this.rotor.colors.length : 0); id++) {
         if (seen.has(id) || this.colorAt(id) < 0) continue;
         const group = this.groupAt(id);
         group.forEach(member => seen.add(member));
@@ -540,7 +535,7 @@
         if (rank > bestRank) { best = group; anchor = front >= 0 ? front : group[0]; bestRank = rank; visible = front >= 0; }
       }
       const status = document.getElementById('hintStatus');
-      if (!best) { status.textContent = this.rotor && this.rotor.projected ? '转动视角，让主体之间或固定方板的同色块在画面上接边' : this.rotor ? '当前没有组合，请等待旋转方板实际接触主体后再试' : '当前没有可以消除的组合，请转动视角，让主体不同位置的同色块在画面上接边'; return; }
+      if (!best) { status.textContent = this.rotor && this.rotor.projected ? '转动视角，让主体之间或固定方板的同色块在画面上接边' : this.rotor ? '当前没有组合，请等待旋转方板实际接触主体后再试' : '当前没有实际相邻的同色组合'; return; }
       this.hintIds = best;
       this.hintTime = 0;
       if (!visible) {
@@ -603,7 +598,7 @@
         t.size[0] = t.baseSize[0] * s;
         t.size[1] = t.baseSize[1] * s;
         t.size[2] = t.baseSize[2] * s;
-        const normal = t.external ? [1, 0, 0] : this.board.faces[this.board.faceOf(t.id)].n;
+        const normal = t.external && this.rotor ? this.rotor.normal(t.id-this.board.size) : t.external ? [1,0,0] : this.board.faces[this.board.faceOf(t.id)].n;
         t.renderCenter = t.center.map((v, a) => v + normal[a] * (t.hintLift || 0));
         m4.fromBasisScale(t.model, t.basis, t.renderCenter, t.size);
         const k = 1 - 0.30 * t.squash;
@@ -1046,7 +1041,8 @@
       this.mainMatcher=null;this.viewLinks=[];
       this.board.fillRandom(NC, Math.random);
       const profile = window.LevelProfile(this.level,this.mode);
-      this.rotor = profile.kind === 'rotor' ? new window.Rotor(this.board) : profile.kind === 'perspective' ? new window.PerspectivePanel(this.board) : null;
+      const panelCount=this.mode==='normal'?N-4:1;
+      this.rotor = profile.kind === 'rotor' ? new window.Rotor(this.board,Math.random,panelCount) : profile.kind === 'perspective' ? new window.PerspectivePanel(this.board,Math.random,panelCount) : null;
       this.tilesAll = this.board.size;
       this.target = this.targetFor(this.level, this.board.size);
       this.dying.length = 0;
@@ -1056,10 +1052,10 @@
       this.lastTickSec = -1;
       this.scene.particles.clear();
       this.spawnTilesFalling(!first);
-      if (this.rotor) for (let i = 0; i < 6; i++) {
+      if (this.rotor) for (let i = 0; i < this.rotor.colors.length; i++) {
         const tile = this.makeTile(0, this.rotor.colors[i]);
         tile.id = this.board.size + i; tile.external = true;
-        tile.center = this.rotor.center(i); tile.homeBasis = this.rotor.basis(); tile.basis = tile.homeBasis.slice();
+        tile.center = this.rotor.center(i); tile.homeBasis = this.rotor.basis(i); tile.basis = tile.homeBasis.slice();
         this.tiles[tile.id] = tile;
       }
       this.hideOverlay();
@@ -1220,7 +1216,7 @@
           <ul>
             <li>点一下<em>连在一起的同色方块</em>（至少 2 块）即可消除，得分 <em>5 × 块数²</em>。</li>
             <li>连在一起是指<em>贴着的一格之内</em>：同一面上下左右相邻，或者<em>翻过棱边</em>的相邻方块。</li>
-            <li>普通消除与视角拼接关支持<em>主体视角配对</em>：转动视角后，同色块在画面中形成可见接边，即可点击一起消除。同一方块只计一块。<em>旋转方板关只按实际相邻或接触判断</em>，不使用视角配对。</li>
+            <li>只有<em>视角拼接关</em>支持视角配对：转动视角后，同色块在画面中形成可见接边，即可点击一起消除。同一方块只计一块。<em>普通消除关和旋转方板关只按实际相邻或接触判断</em>。</li>
           </ul>
           <h4>消完怎么掉</h4>
           <ul>
@@ -1229,7 +1225,7 @@
           </ul>
           <h4>怎么算过关</h4>
           <ul>
-            <li>暂时没有相邻组合时，可以继续转动视角配对同色块；没有可继续配对的同色块时结算，按<em>剩余方块数</em>计算清空奖励。</li>
+            <li>只有视角拼接关可以继续转动视角配对；旋转关还会检查方板后续接触的机会。没有可继续消除的组合时结算，按<em>剩余方块数</em>计算清空奖励。</li>
             <li>累计分数达到<em>目标分</em>才能进下一关，否则游戏结束。</li>
           </ul>
           <h4>操作</h4>
@@ -1241,6 +1237,7 @@
           <ul>
             <li>第 1 关：普通 5×5 消除。菜单的「关卡测试」可以独立体验三种 7×7 关卡，机关按格子尺寸适配。</li>
             <li>第 2 关：2×3 旋转方板，停 2.4 秒、转 90°，六个方块都能接触主体，同色组合仍需点击消除。</li>
+            <li>普通模式随尺寸增加方板数量：5×5 至 9×9 分别有 1 至 5 块。旋转板前四块沿同一面的上、右、下、左轮转，第五块绕周围四个侧面停靠；视角板固定在不同面外侧。</li>
             <li>第 3 关：旁边固定的 2×3 方板。拖动视角，让它与主体的同色方块在画面中边缘对齐相接，然后点击组合消除。单纯重叠不算拼接。</li>
           </ul>
         </div>

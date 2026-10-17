@@ -59,8 +59,8 @@ test('seam visibility cache updates as disappearing cubes move and vanish',()=>{
   a.dying[0].center[0]=1;a.updatePerspectiveContacts();assert.equal(calls,3);
   a.dying=[];a.updatePerspectiveContacts();assert.equal(calls,4);
 });
-test('ordinary levels join main-body view links with physical groups and preserve unique block counts',()=>{
-  const {a}=fixture();a.rotor=null;a.viewLinks=[];
+test('perspective levels join main-body view links with physical groups and preserve unique block counts',()=>{
+  const {a,ctx}=fixture();a.rotor=new ctx.PerspectivePanel(a.board);a.rotor.colors.fill(-1);a.viewLinks=[];
   const first=0,second=a.board.size-1,third=a.board.neighbors(second)[0];
   a.board.color[first]=a.board.color[second]=a.board.color[third]=2;
   a.spawnTilesInstant();a.state='play';a.score=0;
@@ -69,11 +69,20 @@ test('ordinary levels join main-body view links with physical groups and preserv
   assert.equal(a.groupAt(first).length,3);
   a.pop(a.groupAt(first));assert.equal(a.remainingCount(),0);assert.equal(a.score,45);
 });
-test('remaining same colors can still be paired from another view instead of ending the level',()=>{
-  const {a}=fixture();a.rotor=null;a.viewLinks=[];
+test('only perspective levels retain separated same colors as future view pairs',()=>{
+  const {a,ctx}=fixture();a.rotor=null;a.viewLinks=[];
   a.board.color[0]=a.board.color[a.board.size-1]=2;
+  assert.equal(a.hasPotentialMoves(),false);
+  a.rotor=new ctx.PerspectivePanel(a.board);a.rotor.colors.fill(-1);
   assert.equal(a.board.hasMoves(),false);assert.equal(a.hasPotentialMoves(),true);
   a.board.color[a.board.size-1]=3;assert.equal(a.hasPotentialMoves(),false);
+});
+
+test('ordinary elimination ignores stale projected links and clears projection state',()=>{
+  const {a}=fixture();a.rotor=null;a.state='play';a.viewLinks=[[0,a.board.size-1]];
+  a.board.color[0]=a.board.color[a.board.size-1]=2;
+  assert.equal(a.groupAt(0).length,1);
+  a.updatePerspectiveContacts();assert.equal(a.viewLinks.length,0);assert.equal(a.mainMatcher,null);
 });
 
 test('rotating levels disable view seams and do not retain separated body colors as potential matches',()=>{
@@ -138,4 +147,26 @@ test('mechanic introduction only appears in normal 5x5 levels 2 and 3 and pauses
   a.state='play';a.level=3;a.showMechanicIntro();assert.match(html,/转动视角/);
   a.state='busy';html='';a.showMechanicIntro();assert.equal(html,'');
   a.mode='test';assert.equal(a.hasMechanicIntro(),false);
+});
+
+test('fifth rotor can join and remove a host block with correct IDs, count and score',()=>{
+  const {a,ctx}=fixture();a.board=new ctx.Board(9);a.board.color.fill(1);
+  a.rotor=new ctx.Rotor(a.board,()=>0,5);
+  const [main,external]=a.rotor.contacts().find(([m,e])=>m<a.board.size&&e>=a.board.size+24);
+  a.board.color.fill(-1);a.board.color[main]=2;a.rotor.colors.fill(-1);a.rotor.colors[external-a.board.size]=2;
+  a.spawnTilesInstant();const tile=a.makeTile(main,2);tile.id=external;tile.external=true;tile.center=a.rotor.center(external-a.board.size);a.tiles[external]=tile;
+  assert.equal(a.tilesAll,a.board.size+30);assert.equal(a.remainingCount(),2);
+  assert.equal(a.groupAt(main).length,2);assert.equal(a.hasPotentialMoves(),true);
+  a.score=0;a.state='play';a.pop(a.groupAt(external));
+  assert.equal(a.remainingCount(),0);assert.equal(a.score,20);assert.equal(a.rotor.colors[external-a.board.size],-1);
+});
+test('late fixed panels retain future moves and do not share local grid neighbors',()=>{
+  const {a,ctx}=fixture();a.board=new ctx.Board(9);a.board.color.fill(-1);
+  a.rotor=new ctx.PerspectivePanel(a.board,()=>0,5);a.rotor.colors.fill(-1);
+  a.rotor.colors[18]=a.rotor.colors[24]=2;
+  assert.equal(a.hasPotentialMoves(),true);assert.equal(a.groupAt(a.board.size+18).length,1);
+  a.rotor.links=[[a.board.size+18,a.board.size+24]];
+  assert.equal(a.groupAt(a.board.size+24).length,2);
+  a.rotor.links=[];a.rotor.colors.fill(-1);a.rotor.colors[24]=a.rotor.colors[29]=2;
+  assert.equal(a.hasPotentialMoves(),false,'isolated nonadjacent pieces on the same fixed plate cannot pair through a view');
 });

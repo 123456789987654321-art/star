@@ -16,13 +16,14 @@
   };
 
   class Rotor {
-    constructor(board, rnd = Math.random) {
+    constructor(board, rnd = Math.random, panelCount = 1) {
       this.board = board;
       this.angle = 0;
       this.elapsed = 0;
       this.holdDuration = 2.4;
       this.turnDuration = 0.8;
-      this.colors = Int8Array.from({ length: 6 }, () => (rnd() * 6) | 0);
+      this.panelCount = Math.max(1,Math.min(5,Math.floor(panelCount)));
+      this.colors = Int8Array.from({ length: 6*this.panelCount }, () => (rnd() * 6) | 0);
       this.pivot = [board.h + board.pitch / 2, 0, 0];
     }
     update(dt) {
@@ -35,65 +36,100 @@
       this.angle = (step + eased) * Math.PI / 2;
     }
     center(i) {
-      const p = this.board.pitch, y = (1 - Math.floor(i / 2)) * p, z = (i % 2 - 0.5) * p;
-      const c = Math.cos(this.angle), s = -Math.sin(this.angle);
+      const panel=Math.floor(i/6),local=i%6;
+      const p = this.board.pitch, y = (1 - Math.floor(local / 2)) * p, z = (local % 2 - 0.5) * p;
+      const angle=this.angle+panel*Math.PI/2;
+      const c = Math.cos(angle), s = -Math.sin(angle);
+      if(panel===4) {
+        const tangent=z-p/2;
+        const radius=this.board.h*(Math.abs(c)+Math.abs(s))+p/2;
+        return [y,c*radius-s*tangent,s*radius+c*tangent];
+      }
       // Orbit clockwise around the host face. At each stop the outer edge
       // is flush; pull inward slightly during turns to keep all corners inside.
       const ac=Math.abs(c),as=Math.abs(s),h=this.board.h;
       const radius=h-1.5*p;
       // An even-width panel on an odd grid needs a half-cell centre offset.
-      const tangent=Math.round(2*h/p)%2 ? -p/2 : 0;
+      const size=Math.round(2*h/p);
+      const tangent=this.panelCount>1&&size===6?p:size%2 ? -p/2 : 0;
       const limitY=h-p*(1.5*ac+as),limitZ=h-p*(1.5*as+ac);
-      const cy=Math.max(-limitY,Math.min(limitY,c*radius-s*tangent));
-      const cz=Math.max(-limitZ,Math.min(limitZ,s*radius+c*tangent));
+      // Multiple panels rotate as one rigid layout so neighboring plates never
+      // compress into each other. Their outer corners can sweep past the edge
+      // during the turn, then align exactly with the grid at the next stop.
+      const cy=this.panelCount>1?c*radius-s*tangent:Math.max(-limitY,Math.min(limitY,c*radius-s*tangent));
+      const cz=this.panelCount>1?s*radius+c*tangent:Math.max(-limitZ,Math.min(limitZ,s*radius+c*tangent));
       return [this.pivot[0], this.pivot[1]+cy+c*y-s*z, this.pivot[2]+cz+s*y+c*z];
     }
-    basis() {
-      const c = Math.cos(this.angle), s = -Math.sin(this.angle);
+    basis(i = 0) {
+      const panel=Math.floor(i/6),angle=this.angle+panel*Math.PI/2;
+      const c = Math.cos(angle), s = -Math.sin(angle);
+      if(panel===4)return [0,-s,c,1,0,0,0,c,s];
       return [0, -s, c, 0, c, s, -1, 0, 0];
     }
+    normal(i=0) {
+      return Math.floor(i/6)===4?[0,Math.cos(this.angle),-Math.sin(this.angle)]:[1,0,0];
+    }
     neighbors(i) {
-      const row = Math.floor(i / 2), col = i % 2, out = [];
-      for (let j = 0; j < 6; j++) if (Math.abs(Math.floor(j / 2) - row) + Math.abs(j % 2 - col) === 1) out.push(j);
+      const start=Math.floor(i/6)*6,local=i%6,row = Math.floor(local / 2), col = local % 2, out = [];
+      for (let j = 0; j < 6; j++) if (Math.abs(Math.floor(j / 2) - row) + Math.abs(j % 2 - col) === 1) out.push(start+j);
       return out;
     }
-    contacts() {
-      const contacts = [], p = this.board.pitch, h = p / 2;
-      const c = Math.cos(this.angle), s = -Math.sin(this.angle);
-      const axes = [[1, 0], [0, 1], [c, s], [-s, c]];
-      for (let i = 0; i < 6; i++) {
-        if (this.colors[i] < 0) continue;
-        const a = this.center(i);
-        for (let id = 0; id < this.board.size; id++) {
-          if (this.board.color[id] < 0) continue;
-          const b = this.board.cellCenter(id);
-          if (Math.abs(a[0] - b[0] - p) > 1e-6) continue;
-          const delta = [a[1] - b[1], a[2] - b[2]];
-          const overlap = axes.every(axis => {
-            const radiusA = h * (Math.abs(axis[0] * c + axis[1] * s) + Math.abs(-axis[0] * s + axis[1] * c));
-            const radiusB = h * (Math.abs(axis[0]) + Math.abs(axis[1]));
-            return Math.abs(delta[0] * axis[0] + delta[1] * axis[1]) < radiusA + radiusB - 0.02 * p;
-          });
-          if (overlap) contacts.push([id, this.board.size + i]);
-        }
+    static touching(a,A,b,B,p) {
+      const dot=(u,v)=>u[0]*v[0]+u[1]*v[1]+u[2]*v[2];
+      const cross=(u,v)=>[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]];
+      const axes=m=>[m.slice(0,3),m.slice(3,6),m.slice(6,9)],aa=axes(A),bb=axes(B);
+      const delta=a.map((v,i)=>v-b[i]);let boundary=false;
+      for(const axis of [...aa,...bb,...aa.flatMap(u=>bb.map(v=>cross(u,v)))]) {
+        const length=Math.hypot(...axis);if(length<1e-8)continue;
+        const gap=Math.abs(dot(delta,axis))-p/2*[...aa,...bb].reduce((sum,u)=>sum+Math.abs(dot(u,axis)),0);
+        if(gap>1e-7*length)return false;
+        if(Math.abs(gap)<1e-7*length&&
+          aa.some(u=>Math.abs(Math.abs(dot(u,axis))-length)<1e-7)&&
+          bb.some(u=>Math.abs(Math.abs(dot(u,axis))-length)<1e-7))boundary=true;
       }
-      return contacts;
+      if(!boundary)return false;
+      // Reject edge/corner-only touches: at least two cube face tangents overlap.
+      const tangentOverlaps=aa.filter(axis=>{
+        const radius=p/2*[...aa,...bb].reduce((sum,u)=>sum+Math.abs(dot(u,axis)),0);
+        return radius-Math.abs(dot(delta,axis))>0.02*p;
+      }).length;
+      return tangentOverlaps>=2;
+    }
+    contacts() {
+      const key=this.angle+'|'+this.colors.join(',')+'|'+this.board.color.join(',');
+      if(this.contactKey===key)return this.contactLinks;
+      const contacts=[],p=this.board.pitch,identity=[1,0,0,0,1,0,0,0,1];
+      const boxes=Array.from(this.colors,(color,i)=>color>=0?{id:this.board.size+i,center:this.center(i),basis:this.basis(i)}:null).filter(Boolean);
+      const close=(a,b)=>a.every((v,k)=>Math.abs(v-b[k])<=1.75*p);
+      for(const a of boxes)for(let id=0;id<this.board.size;id++) {
+        if(this.board.color[id]<0)continue;
+        const b=this.board.cellCenter(id);
+        if(close(a.center,b)&&Rotor.touching(a.center,a.basis,b,identity,p))contacts.push([id,a.id]);
+      }
+      for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++) {
+        const a=boxes[i],b=boxes[j];
+        if(Math.floor((a.id-this.board.size)/6)===Math.floor((b.id-this.board.size)/6))continue;
+        if(close(a.center,b.center)&&Rotor.touching(a.center,a.basis,b.center,b.basis,p))contacts.push([a.id,b.id]);
+      }
+      this.contactKey=key;this.contactLinks=contacts;return contacts;
     }
     remaining() { return this.colors.filter(c => c >= 0).length; }
   }
   g.Rotor = Rotor;
   class PerspectivePanel extends Rotor {
-    constructor(board, rnd = Math.random) {
-      super(board, rnd);
+    constructor(board, rnd = Math.random, panelCount = 1) {
+      super(board, rnd, panelCount);
       this.projected = true;
       this.links = [];
     }
     update() {} // The panel stays in world space; only the player's view moves.
     center(i) {
-      const p = this.board.pitch;
-      return [this.board.h + p/2 + 1.2 + (i%2)*p, (1-Math.floor(i/2))*p, -0.8];
+      const p = this.board.pitch,local=i%6,panel=Math.floor(i/6);
+      const x=this.board.h+p/2+1.2+(local%2)*p,y=(1-Math.floor(local/2))*p,z=-0.8;
+      return [[x,y,z],[-z,y,x],[-x,y,-z],[z,y,-x],[y,x,z]][panel];
     }
     basis() { return [1,0,0,0,1,0,0,0,1]; }
+    normal(i=0) {return [[1,0,0],[0,0,1],[-1,0,0],[0,0,-1],[0,1,0]][Math.floor(i/6)];}
     contacts() { return this.links; }
     static hull(points) {
       const sorted = points.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
@@ -170,7 +206,7 @@
       if(pickAt) {
         // Occlusion cuts new visible boundaries into a face. Sample the final
         // depth-tested image on each side of an edge, not its uncut polygon.
-        const panels=Array.from({length:6},(_,i)=>this.colors[i]>=0?faces(this.center(i)):[]);
+        const panels=Array.from({length:this.colors.length},(_,i)=>this.colors[i]>=0?faces(this.center(i)):[]);
         const bounds=shape=>[Math.min(...shape.map(p=>p[0])),Math.max(...shape.map(p=>p[0])),Math.min(...shape.map(p=>p[1])),Math.max(...shape.map(p=>p[1]))];
         const panelBounds=panels.flat().filter(s=>s.length>=3).map(bounds);
         const nearPanel=shape=>{const r=bounds(shape);return panelBounds.some(q=>r[0]<=q[1]+2&&q[0]<=r[1]+2&&r[2]<=q[3]+2&&q[2]<=r[3]+2);};
@@ -199,8 +235,10 @@
               const first=pick([x+nx,y+ny]),second=pick([x-nx,y-ny]);
               const main=Math.min(first,second),extra=Math.max(first,second);
               const bodyPair=includeMain&&main!==extra&&extra<b.size&&b.color[extra]>=0;
-              const panelPair=extra>=b.size&&extra<b.size+6&&this.colors[extra-b.size]>=0;
-              const valid=main>=0&&main<b.size&&b.color[main]>=0&&(bodyPair||panelPair);
+              const panelPair=extra>=b.size&&extra<b.size+this.colors.length&&this.colors[extra-b.size]>=0&&
+                (main<b.size||Math.floor((main-b.size)/6)!==Math.floor((extra-b.size)/6));
+              const mainLive=main>=0&&(main<b.size?b.color[main]>=0:main<b.size+this.colors.length&&this.colors[main-b.size]>=0);
+              const valid=main!==extra&&mainLive&&(bodyPair||panelPair);
               const key=valid?main+','+extra:'';
               run=key&&key===previous?run+1:key?1:0;previous=key;
               if(run>=3&&length*(run-1)/10>=3)found.add(key);
@@ -212,7 +250,7 @@
         this.links=Array.from(found,key=>key.split(',').map(Number));
         return;
       }
-      for(let i=0;i<6;i++) {
+      for(let i=0;i<this.colors.length;i++) {
         if(this.colors[i]<0)continue;
         const id=b.size+i,center=this.center(i),shapes=faces(center);
         for(let j=0;j<b.size;j++) {
