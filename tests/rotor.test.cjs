@@ -44,3 +44,18 @@ test('rotor holds for 2.4 seconds then turns a quarter turn over 0.8 seconds', (
   r.update(0.4); assert.ok(Math.abs(r.angle - Math.PI / 2) < 1e-8);
   r.update(2); assert.ok(Math.abs(r.angle - Math.PI / 2) < 1e-8);
 });
+
+test('panel rests flush with top right bottom left edges clockwise as seen from outside +X',()=>{
+  for(const size of [5,7]) {
+    const b=new Board(size),r=new Rotor(b);
+    for(let step=0;step<4;step++) {
+      r.angle=step*Math.PI/2;
+      const points=Array.from({length:6},(_,i)=>r.center(i));
+      const axis=step%2===0?1:2,sign=[1,-1,-1,1][step];
+      const outer=Math.max(...points.map(p=>sign*p[axis]))+b.pitch/2;
+      assert.ok(Math.abs(outer-b.h)<1e-8,'panel outer edge must be flush at stop '+step);
+      const mean=points.reduce((sum,p)=>sum+sign*p[axis],0)/6;
+      assert.ok(mean>0,'panel orbits to the requested edge instead of spinning centrally');
+    }
+  }
+});

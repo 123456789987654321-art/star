@@ -32,11 +32,17 @@
     }
     center(i) {
       const p = this.board.pitch, y = (1 - Math.floor(i / 2)) * p, z = (i % 2 - 0.5) * p;
-      const c = Math.cos(this.angle), s = Math.sin(this.angle);
-      return [this.pivot[0], this.pivot[1] + c * y - s * z, this.pivot[2] + s * y + c * z];
+      const c = Math.cos(this.angle), s = -Math.sin(this.angle);
+      // Orbit clockwise around the host face. At each stop the outer edge
+      // is flush; pull inward slightly during turns to keep all corners inside.
+      const ac=Math.abs(c),as=Math.abs(s),h=this.board.h;
+      let radius=h-1.5*p;
+      if(ac>1e-8)radius=Math.min(radius,(h-p*(1.5*ac+as))/ac);
+      if(as>1e-8)radius=Math.min(radius,(h-p*(1.5*as+ac))/as);
+      return [this.pivot[0], this.pivot[1] + c * (y+radius) - s * z, this.pivot[2] + s * (y+radius) + c * z];
     }
     basis() {
-      const c = Math.cos(this.angle), s = Math.sin(this.angle);
+      const c = Math.cos(this.angle), s = -Math.sin(this.angle);
       return [0, -s, c, 0, c, s, -1, 0, 0];
     }
     neighbors(i) {
@@ -46,7 +52,7 @@
     }
     contacts() {
       const contacts = [], p = this.board.pitch, h = p / 2;
-      const c = Math.cos(this.angle), s = Math.sin(this.angle);
+      const c = Math.cos(this.angle), s = -Math.sin(this.angle);
       const axes = [[1, 0], [0, 1], [c, s], [-s, c]];
       for (let i = 0; i < 6; i++) {
         if (this.colors[i] < 0) continue;
