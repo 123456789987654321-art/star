@@ -104,3 +104,15 @@ test('level selection persists separate completed levels and restores entry scor
   a.startGame('test',3);a.score=99999;a.target=0;a.recordClear();
   assert.equal(a.progressFor('normal').next,3);assert.equal(a.progressFor('challenge').next,1);
 });
+
+for(const mode of ['normal','challenge'])test(`${mode}: first and next available level are selectable without completing them first`,()=>{
+  const {a}=fixture();let html='',starts=0;
+  a.overlay=s=>html=s;a.startLevel=()=>starts++;
+  a.showLevelSelect(mode);
+  assert.match(html,/data-level="1"/);assert.doesNotMatch(html,/data-level="2"/);
+  a.startSelectedLevel(mode,1);assert.equal(starts,1);assert.equal(a.score,0);
+  a.score=900;a.target=500;a.recordClear();a.showLevelSelect(mode);
+  assert.match(html,/data-level="2"/);assert.doesNotMatch(html,/data-level="3"/);
+  a.startSelectedLevel(mode,2);assert.equal(starts,2);assert.equal(a.score,900);
+  a.startSelectedLevel(mode,3);assert.equal(starts,2);
+});

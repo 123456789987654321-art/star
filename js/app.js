@@ -1008,15 +1008,17 @@
       let buttons='';
       for(let level=1;level<=count;level++) {
         const cleared=Object.prototype.hasOwnProperty.call(p.cleared,level);
-        buttons+=`<button class="level-choice ${cleared?'passed':'locked'}" ${cleared?`data-act="selectLevel" data-level="${level}"`:'disabled'} aria-label="第 ${level} 关，${cleared?'已通关':'未通关，锁定'}">${level}<small>${cleared?'已通关':'🔒'}</small></button>`;
+        const unlocked=cleared||level===p.next;
+        const label=cleared?'已通关':unlocked?'可挑战':'🔒';
+        buttons+=`<button class="level-choice ${unlocked?'passed':'locked'}" ${unlocked?`data-act="selectLevel" data-level="${level}"`:'disabled'} aria-label="第 ${level} 关，${unlocked?label:'未解锁'}">${level}<small>${label}</small></button>`;
       }
-      this.overlay(`<h2 class="ov-title">${mode==='normal'?'普通模式':'挑战模式'} · 选关</h2><p class="ov-sub">彩色关卡可重玩 · 灰色关卡尚未通关</p><div class="level-grid">${buttons}</div><div class="ov-actions"><button class="ov-btn" data-act="continueLevels">${p.next===1?'开始闯关':'继续闯关'} · 第 ${p.next} 关</button><button class="ov-btn plain" data-act="helpClose">返回菜单</button></div>`);
+      this.overlay(`<h2 class="ov-title">${mode==='normal'?'普通模式':'挑战模式'} · 选关</h2><p class="ov-sub">彩色关卡可进入 · 通关后解锁下一关</p><div class="level-grid">${buttons}</div><div class="ov-actions"><button class="ov-btn" data-act="continueLevels">${p.next===1?'开始闯关':'继续闯关'} · 第 ${p.next} 关</button><button class="ov-btn plain" data-act="helpClose">返回菜单</button></div>`);
     },
     startSelectedLevel(mode,level,continuing=false) {
       const p=this.progressFor(mode);
-      if(!Number.isSafeInteger(level)||!(Object.prototype.hasOwnProperty.call(p.cleared,level)||(continuing&&level===p.next)))return;
+      if(!Number.isSafeInteger(level)||!(Object.prototype.hasOwnProperty.call(p.cleared,level)||level===p.next))return;
       this.mode=mode;this.level=level;
-      this.score=continuing?p.score:p.cleared[level];
+      this.score=level===p.next?p.score:p.cleared[level];
       this.entryScore=this.score;this.newRecord=false;this.startLevel(true);
     },
     startGame(mode, testLevel = 1) {
