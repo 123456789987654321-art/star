@@ -126,3 +126,16 @@ test('normal campaign stops at 15 and keeps completed levels replayable',()=>{
   a.mode='normal';a.level=15;a.score=90000;a.target=85000;a.showClearPanel();
   assert.doesNotMatch(html,/data-act="next"/);
 });
+
+test('mechanic introduction only appears in normal 5x5 levels 2 and 3 and pauses until dismissed',()=>{
+  const {a,ctx}=fixture();ctx.performance={now:()=>0};let html='';a.overlay=s=>html=s;
+  a.mode='normal';
+  for(let level=1;level<=15;level++) {a.level=level;assert.equal(a.hasMechanicIntro(),level===2||level===3);}
+  a.level=2;a.state='intro';a.introLeft=0;a.introDone=false;
+  a.updateTimers(0.1);assert.equal(a.state,'paused');assert.match(html,/我知道了/);assert.match(html,/顺时针/);
+  a.hideOverlay=()=>{};a.resume();assert.equal(a.state,'play');
+  a.showMechanicIntro();assert.equal(a.state,'paused');
+  a.state='play';a.level=3;a.showMechanicIntro();assert.match(html,/转动视角/);
+  a.state='busy';html='';a.showMechanicIntro();assert.equal(html,'');
+  a.mode='test';assert.equal(a.hasMechanicIntro(),false);
+});

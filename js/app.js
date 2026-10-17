@@ -390,6 +390,7 @@
           this.state = 'play';
           if (this.mode === 'challenge') this.timeLeft = this.timeFor(this.level);
           this.updateHud();
+          this.showMechanicIntro();
         }
       }
       if (this.state === 'play' && this.mode === 'challenge') {
@@ -1064,6 +1065,7 @@
       this.hideOverlay();
       document.getElementById('menu').classList.add('hidden');
       document.getElementById('hud').classList.remove('hidden');
+      document.getElementById('btnMechanicInfo').classList.toggle('hidden',!this.hasMechanicIntro());
       this.setZoom(first ? 0 : this.zoom);
       this.scene.orbit = null;
       this.scene.yaw = 0.62;
@@ -1162,6 +1164,7 @@
       document.getElementById('btnHowto').addEventListener('click', () => this.showHelp(true));
       document.getElementById('btnHelp').addEventListener('click', () => this.showHelp());
       document.getElementById('btnHint').addEventListener('click', () => this.showHint());
+      document.getElementById('btnMechanicInfo').addEventListener('click', () => this.showMechanicIntro());
       document.getElementById('btnMenu').addEventListener('click', () => this.toMenu());
       const sb = document.getElementById('btnSound');
       sb.addEventListener('click', () => {
@@ -1195,6 +1198,17 @@
 
     hideOverlay() { document.getElementById('overlay').classList.add('hidden'); },
 
+    hasMechanicIntro() {
+      return this.mode==='normal'&&(this.level===2||this.level===3);
+    },
+    showMechanicIntro() {
+      if(!this.hasMechanicIntro()||this.state!=='play')return;
+      this.state='paused';this.clearHover();this.hideTip();
+      const rotor=this.level===2;
+      this.overlay(`<h2 class="ov-title">${rotor?'旋转方板':'视角拼接'}</h2><p class="ov-sub">新机关 · 先了解怎么玩</p><div class="ov-help"><ul>${rotor?
+        '<li>2×3 方板贴着主体面，沿四条边<em>顺时针一转一停</em>。</li><li>方板与主体的同色块<em>实际接触</em>时，点击即可一起消除。</li><li>这一关只按实际接触判断，单纯看起来相连不算。</li>':
+        '<li>旁边的 2×3 方板是固定的，试着<em>转动视角</em>。</li><li>让方板与主体的同色块在画面里<em>边缘对齐相接</em>，再点击一起消除。</li><li>主体方块之间也可视角拼接；只碰角、明显空隙或完全遮挡不算。</li>'}</ul><p>想再看一次，点击右下角的“！”。</p></div><div class="ov-actions"><button class="ov-btn" data-act="resume">我知道了</button></div>`);
+    },
     showHelp(fromMenu) {
       // 从菜单打开时不能把 state 改成 play，所以两种入口给不同的关闭按钮
       if (!fromMenu && this.state === 'play') this.state = 'paused';
