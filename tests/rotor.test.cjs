@@ -59,3 +59,18 @@ test('panel rests flush with top right bottom left edges clockwise as seen from 
     }
   }
 });
+
+test('every stopped panel cube aligns with exactly one host grid cell',()=>{
+  for(const size of [5,7]) {
+    const b=new Board(size),r=new Rotor(b);b.color.fill(0);
+    for(let step=0;step<4;step++) {
+      r.angle=step*Math.PI/2;
+      const contacts=r.contacts();
+      assert.equal(contacts.length,6,'six panel cubes must contact six host cubes, without half-cell overlaps');
+      for(const [id,external] of contacts) {
+        const a=r.center(external-b.size),c=b.cellCenter(id);
+        assert.ok(Math.abs(a[1]-c[1])<1e-8&&Math.abs(a[2]-c[2])<1e-8);
+      }
+    }
+  }
+});

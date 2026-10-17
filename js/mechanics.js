@@ -36,10 +36,13 @@
       // Orbit clockwise around the host face. At each stop the outer edge
       // is flush; pull inward slightly during turns to keep all corners inside.
       const ac=Math.abs(c),as=Math.abs(s),h=this.board.h;
-      let radius=h-1.5*p;
-      if(ac>1e-8)radius=Math.min(radius,(h-p*(1.5*ac+as))/ac);
-      if(as>1e-8)radius=Math.min(radius,(h-p*(1.5*as+ac))/as);
-      return [this.pivot[0], this.pivot[1] + c * (y+radius) - s * z, this.pivot[2] + s * (y+radius) + c * z];
+      const radius=h-1.5*p;
+      // An even-width panel on an odd grid needs a half-cell centre offset.
+      const tangent=Math.round(2*h/p)%2 ? -p/2 : 0;
+      const limitY=h-p*(1.5*ac+as),limitZ=h-p*(1.5*as+ac);
+      const cy=Math.max(-limitY,Math.min(limitY,c*radius-s*tangent));
+      const cz=Math.max(-limitZ,Math.min(limitZ,s*radius+c*tangent));
+      return [this.pivot[0], this.pivot[1]+cy+c*y-s*z, this.pivot[2]+cz+s*y+c*z];
     }
     basis() {
       const c = Math.cos(this.angle), s = -Math.sin(this.angle);
