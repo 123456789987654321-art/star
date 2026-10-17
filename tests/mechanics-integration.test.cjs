@@ -59,3 +59,31 @@ test('seam visibility cache updates as disappearing cubes move and vanish',()=>{
   a.dying[0].center[0]=1;a.updatePerspectiveContacts();assert.equal(calls,3);
   a.dying=[];a.updatePerspectiveContacts();assert.equal(calls,4);
 });
+test('ordinary levels join main-body view links with physical groups and preserve unique block counts',()=>{
+  const {a}=fixture();a.rotor=null;a.viewLinks=[];
+  const first=0,second=a.board.size-1,third=a.board.neighbors(second)[0];
+  a.board.color[first]=a.board.color[second]=a.board.color[third]=2;
+  a.spawnTilesInstant();a.state='play';a.score=0;
+  assert.equal(a.groupAt(first).length,1);
+  a.viewLinks=[[first,second],[second,first],[first,second]];
+  assert.equal(a.groupAt(first).length,3);
+  a.pop(a.groupAt(first));assert.equal(a.remainingCount(),0);assert.equal(a.score,45);
+});
+test('remaining same colors can still be paired from another view instead of ending the level',()=>{
+  const {a}=fixture();a.rotor=null;a.viewLinks=[];
+  a.board.color[0]=a.board.color[a.board.size-1]=2;
+  assert.equal(a.board.hasMoves(),false);assert.equal(a.hasPotentialMoves(),true);
+  a.board.color[a.board.size-1]=3;assert.equal(a.hasPotentialMoves(),false);
+});
+
+test('rotating panel remains an occluder when matching body-only view seams',()=>{
+  const {a,ctx}=fixture();a.state='play';a.rotor=new ctx.Rotor(a.board);
+  a.mainMatcher=new ctx.PerspectivePanel(a.board);a.mainMatcher.colors.fill(-1);
+  a.scene.vp=[1];a.scene.w=a.scene.h=100;a.scene.dpr=1;
+  const panelTile={id:a.board.size};a.renderList=[{id:0},panelTile];
+  a.scene.pick=(x,y,tiles)=>tiles.includes(panelTile)?panelTile.id:0;
+  a.mainMatcher.updateProjection=(project,visible,eye,pick)=>{
+    assert.equal(pick([50,50],[0]),panelTile.id,'visible rotor must block the body behind it');
+  };
+  a.updatePerspectiveContacts();
+});

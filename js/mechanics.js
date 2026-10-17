@@ -126,22 +126,33 @@
       }
       return seams;
     }
-    updateProjection(project, visible, eye, pickAt) {
+    updateProjection(project, visible, eye, pickAt, includeMain = false) {
       const b=this.board,half=b.pitch/2;
-      const faces=center=>{
+      const cellKey=center=>center.map(v=>Math.round(v/b.pitch)).join(',');
+      const occupied=new Set(b.cells.flatMap((_,id)=>b.color[id]>=0?[cellKey(b.cellCenter(id))]:[]));
+      const neighbor=(center,axis,sign)=>{const p=center.slice();p[axis]+=sign*b.pitch;return occupied.has(cellKey(p));};
+      const faces=(center,main=false)=>{
         const result=[];
         for(let axis=0;axis<3;axis++)for(const sign of [-1,1]) {
           if(eye&&(eye[axis]-center[axis]-sign*half)*sign<=0)continue;
+          if(main&&neighbor(center,axis,sign))continue;
           const others=[0,1,2].filter(a=>a!==axis),points=[];
           for(const u of [-half,half])for(const v of [-half,half]) {
             const world=center.slice();world[axis]+=sign*half;world[others[0]]+=u;world[others[1]]+=v;
-            const p=project(world);if(p&&p.every(Number.isFinite))points.push(p);
+            const p=project(world);if(p&&p.every(Number.isFinite)){p.world=world;points.push(p);}
           }
-          if(points.length===4)result.push(PerspectivePanel.hull(points));
+          if(points.length===4) {
+            const polygon=PerspectivePanel.hull(points);
+            if(main)polygon.skipEdges=polygon.map((p,i)=>{
+              const q=polygon[(i+1)%polygon.length];
+              return others.some(a=>Math.abs(p.world[a]-q.world[a])<1e-8&&neighbor(center,a,Math.sign(p.world[a]-center[a])));
+            });
+            result.push(polygon);
+          }
         }
         return result;
       };
-      const surface=b.cells.map((_,id)=>b.color[id]>=0?faces(b.cellCenter(id)):null);
+      const surface=b.cells.map((_,id)=>b.color[id]>=0?faces(b.cellCenter(id),true):null);
       const links=[];
       if(pickAt) {
         // Occlusion cuts new visible boundaries into a face. Sample the final
@@ -163,8 +174,9 @@
           return cache.get(key);
         };
         const scan=shape=>{
-          if(shape.length<3||!nearPanel(shape))return;
+          if(shape.length<3||(!includeMain&&!nearPanel(shape)))return;
           for(let edge=0;edge<shape.length;edge++) {
+            if(shape.skipEdges&&shape.skipEdges[edge])continue; // Shared physical edges are already Board neighbours.
             const a=shape[edge],z=shape[(edge+1)%shape.length],dx=z[0]-a[0],dy=z[1]-a[1],length=Math.hypot(dx,dy);
             if(length<4)continue;
             const inset=Math.min(1.25,length*0.06),nx=-dy/length*inset,ny=dx/length*inset;
@@ -173,7 +185,9 @@
               const t=sample/10,x=a[0]+dx*t,y=a[1]+dy*t;
               const first=pick([x+nx,y+ny]),second=pick([x-nx,y-ny]);
               const main=Math.min(first,second),extra=Math.max(first,second);
-              const valid=main>=0&&main<b.size&&extra>=b.size&&extra<b.size+6&&b.color[main]>=0&&this.colors[extra-b.size]>=0;
+              const bodyPair=includeMain&&main!==extra&&extra<b.size&&b.color[extra]>=0;
+              const panelPair=extra>=b.size&&extra<b.size+6&&this.colors[extra-b.size]>=0;
+              const valid=main>=0&&main<b.size&&b.color[main]>=0&&(bodyPair||panelPair);
               const key=valid?main+','+extra:'';
               run=key&&key===previous?run+1:key?1:0;previous=key;
               if(run>=3&&length*(run-1)/10>=3)found.add(key);

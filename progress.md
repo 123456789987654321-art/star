@@ -1,3 +1,5 @@
+Latest scope: main-body perspective pairing in ALL formal and test levels. Unique block IDs; visible depth-picked seams; physical adjacency retained. Main5/test7 unchanged. Global scan skips internal faces and physically shared edges. Review regression retains rotating panel as an occluder.
+
 # Progress
 
 - Read current Board, App, Scene and tests; no product changes for mechanics yet.

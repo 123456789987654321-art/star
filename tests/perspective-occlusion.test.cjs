@@ -13,7 +13,7 @@ function fixture(yaw,pitch) {
   const tiles=board.cells.map((_,id)=>({id,center:board.cellCenter(id),basis:[1,0,0,0,1,0,0,0,1],size:[board.pitch,board.pitch,board.pitch]}));
   for(let i=0;i<6;i++)tiles.push({id:board.size+i,center:panel.center(i),basis:panel.basis(),size:[board.pitch,board.pitch,board.pitch]});
   const project=p=>scene.project(p);
-  const pick=(p,candidates)=>scene.pick(p[0]/550-1,1-p[1]/425,candidates?tiles.filter(t=>candidates.includes(t.id)):tiles);
+  const pick=(p,candidates)=>scene.pick(p[0]/550-1,1-p[1]/425,tiles.filter(t=>(!candidates||candidates.includes(t.id))&&(t.id<board.size?board.color[t.id]>=0:panel.colors[t.id-board.size]>=0)));
   const visible=(id,center,point)=>pick(point||project(center))===id;
   return {board,panel,scene,project,pick,visible};
 }
@@ -31,4 +31,12 @@ test('a fully hidden panel is not a visible connection',()=>{
   const f=fixture(-Math.PI/2,0);
   f.panel.updateProjection(f.project,f.visible,f.scene.eye,f.pick);
   assert.equal(f.panel.contacts().length,0);
+});
+test('main-body surfaces can join through a projected hole without an external panel',()=>{
+  const f=fixture(0.3,0.3);f.panel.colors.fill(-1);
+  f.board.cells.forEach((_,id)=>{const p=f.board.cellCenter(id);if(p[2]>0.5&&Math.abs(p[0])<0.6&&Math.abs(p[1])<0.6)f.board.color[id]=-1;});
+  f.panel.updateProjection(f.project,f.visible,f.scene.eye,f.pick,true);
+  const virtual=f.panel.contacts().filter(([a,b])=>a<f.board.size&&b<f.board.size&&!f.board.neighbors(a).includes(b));
+  assert.ok(virtual.length>0);
+  assert.ok(virtual.every(([a,b])=>a!==b&&f.board.color[a]>=0&&f.board.color[b]>=0));
 });

@@ -1,3 +1,5 @@
+Latest scope: main-body perspective pairing in ALL formal and test levels. Unique block IDs; visible depth-picked seams; physical adjacency retained. Main5/test7 unchanged. Global scan skips internal faces and physically shared edges. Review regression retains rotating panel as an occluder.
+
 # Current task: level mechanics
 
 Latest fix: use depth-picked image boundaries for partial-occlusion perspective seams. Require sustained edge contact; reject hidden panels, corners and visible gaps. Tested with actual Scene matrices/raycasts and browser interaction, not only polygon fixtures.

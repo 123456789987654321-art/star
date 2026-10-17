@@ -37,6 +37,8 @@
     tilesAll: 0,
     board: null,
     rotor: null,
+    mainMatcher: null,
+    viewLinks: [],
     scene: null,
     tiles: null,          // 按格 id 索引
     dying: [],            // 正在消散的方块
@@ -167,10 +169,10 @@
     },
     remainingCount() { return this.board.aliveCount() + (this.rotor ? this.rotor.remaining() : 0); },
     groupAt(id) {
-      if (!this.rotor) return this.board.groupOf(id);
+      if (!this.rotor && !this.viewLinks.length) return this.board.groupOf(id);
       const c = this.colorAt(id);
       if (c < 0 || this.board.covered[id]) return [];
-      const contacts = this.rotor.contacts();
+      const contacts = (this.rotor ? this.rotor.contacts() : []).concat(this.viewLinks);
       const run = color => {
         const out = [], stack = [id], seen = new Set([id]);
         while (stack.length) {
@@ -185,6 +187,11 @@
     },
     hasPotentialMoves() {
       if (this.board.hasMoves()) return true;
+      const colors=new Set();
+      for(const color of this.board.color)if(color>=0) {
+        if(colors.has(color))return true; // A future view can join separated same-color blocks.
+        colors.add(color);
+      }
       if (this.rotor && this.rotor.projected) {
         for(let i=0;i<6;i++) {
           const color=this.rotor.colors[i];
@@ -335,10 +342,18 @@
     },
 
     updatePerspectiveContacts() {
-      const panel=this.rotor,sc=this.scene;
-      if(!panel || !panel.projected || this.state!=='play')return;
+      const sc=this.scene;
+      if(!this.board || this.state!=='play')return;
+      let panel=this.rotor;
+      if(!panel || !panel.projected) {
+        if(!this.mainMatcher || this.mainMatcher.board!==this.board) {
+          this.mainMatcher=new window.PerspectivePanel(this.board);this.mainMatcher.colors.fill(-1);
+        }
+        panel=this.mainMatcher;
+      }
       const fading=this.dying.map(t=>t.id+':'+t.center.join(',')+':'+t.scaleMul).join(';');
-      const key=Array.from(sc.vp).join(',')+'|'+this.board.color.join(',')+'|'+panel.colors.join(',')+'|'+sc.w+','+sc.h+'|'+fading;
+      const rotorKey=this.rotor?this.rotor.angle+':'+this.rotor.colors.join(','):'';
+      const key=Array.from(sc.vp).join(',')+'|'+this.board.color.join(',')+'|'+panel.colors.join(',')+'|'+sc.w+','+sc.h+'|'+fading+'|'+rotorKey;
       if(panel.projectionKey===key)return;
       panel.projectionKey=key;
       panel.updateProjection(p=>sc.project(p),(id,center,seamPoint)=>{
@@ -348,9 +363,14 @@
         return Math.abs(x)<=1 && Math.abs(y)<=1 && sc.pick(x,y,this.renderList)===id;
       },sc.eye,(p,candidates)=>{
         const x=p[0]/(sc.w/sc.dpr)*2-1,y=1-p[1]/(sc.h/sc.dpr)*2;
-        const tiles=candidates?this.renderList.filter(t=>candidates.includes(t.id)||this.dying.includes(t)):this.renderList;
+        const tiles=candidates?this.renderList.filter(t=>candidates.includes(t.id)||t.id>=this.board.size||this.dying.includes(t)):this.renderList;
         return Math.abs(x)<=1&&Math.abs(y)<=1?sc.pick(x,y,tiles):-1;
-      });
+      },true);
+      const next=panel.contacts().filter(pair=>pair[1]<this.board.size);
+      if(JSON.stringify(next)!==JSON.stringify(this.viewLinks)) {
+        this.viewLinks=next;this.clearHover();
+        if(this.hintIds&&!this.hintIds.every(id=>this.groupAt(this.hintIds[0]).includes(id)))this.clearHint();
+      }
     },
 
     updateTimers(dt) {
@@ -518,7 +538,7 @@
         if (rank > bestRank) { best = group; anchor = front >= 0 ? front : group[0]; bestRank = rank; visible = front >= 0; }
       }
       const status = document.getElementById('hintStatus');
-      if (!best) { status.textContent = this.rotor && this.rotor.projected ? '转动视角，让固定方板和主体的同色块在画面上边缘对齐' : this.rotor ? '暂时没有组合，等待旋转方板接触主体后再试' : '当前没有可以消除的方块'; return; }
+      if (!best) { status.textContent = this.rotor && this.rotor.projected ? '转动视角，让主体之间或固定方板的同色块在画面上接边' : this.rotor ? '当前没有组合，请转动视角配对主体同色块，或等待方板停靠' : '当前没有可以消除的组合，请转动视角，让主体不同位置的同色块在画面上接边'; return; }
       this.hintIds = best;
       this.hintTime = 0;
       if (!visible) {
@@ -978,6 +998,7 @@
       const N = this.cubeSizeFor(this.mode, this.level);
       this.N = N;
       this.board = new window.Board(N);
+      this.mainMatcher=null;this.viewLinks=[];
       this.board.fillRandom(NC, Math.random);
       const profile = window.LevelProfile(this.level);
       this.rotor = profile.kind === 'rotor' ? new window.Rotor(this.board) : profile.kind === 'perspective' ? new window.PerspectivePanel(this.board) : null;
@@ -1023,6 +1044,7 @@
       this.clearHint();
       this.scene.orbit = null;
       this.rotor = null;
+      this.mainMatcher=null;this.viewLinks=[];
       this.state = 'menu';
       this.timer = null;
       this.dying.length = 0;
@@ -1137,6 +1159,7 @@
           <ul>
             <li>点一下<em>连在一起的同色方块</em>（至少 2 块）即可消除，得分 <em>5 × 块数²</em>。</li>
             <li>连在一起是指<em>贴着的一格之内</em>：同一面上下左右相邻，或者<em>翻过棱边</em>的相邻方块。</li>
+            <li>所有关卡都支持<em>主体视角配对</em>：转动视角后，不同面的同色块在画面中形成可见接边，也可以点击一起消除。露出多个面的同一方块只计一块。</li>
           </ul>
           <h4>消完怎么掉</h4>
           <ul>
@@ -1145,7 +1168,7 @@
           </ul>
           <h4>怎么算过关</h4>
           <ul>
-            <li>当六个面都找不出相邻同色时本关结束，按<em>剩余方块数</em>结算清空奖励。</li>
+            <li>暂时没有相邻组合时，可以继续转动视角配对同色块；没有可继续配对的同色块时结算，按<em>剩余方块数</em>计算清空奖励。</li>
             <li>累计分数达到<em>目标分</em>才能进下一关，否则游戏结束。</li>
           </ul>
           <h4>操作</h4>
