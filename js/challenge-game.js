@@ -3,7 +3,7 @@
   'use strict';
   const IDENTITY=[1,0,0,0,1,0,0,0,1];
   const COLORS=[[.97,.24,.32],[.64,.34,.99],[.20,.85,.50],[.22,.58,1],[1,.80,.22],[1,.44,.79],[.55,.63,.76]];
-  const NAMES=['三棱锥','圆柱体','球体','引水灭火','三棱柱','棱台','十字双环','自由拼接','啮合齿轮','投射补靶','平衡跷跷板','弹珠通道'];
+  const NAMES=['三棱锥','圆柱体','球体','高楼营救','三棱柱','棱台','十字双环','自由拼接','啮合齿轮','投射补靶','平衡跷跷板','弹珠通道'];
   const SHAPES=[['tetrahedron','三棱锥'],['cylinder','圆柱'],['sphere','球体'],['prism','三棱柱'],['frustum','棱台'],['torus','圆环']];
   const $=id=>document.getElementById(id);
   const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -22,19 +22,20 @@
       app.scene.particles.clear();app.scene.orbit=null;app.scene.yaw=[4,10,11,12].includes(level)?0:.58;
       app.scene.pitch=[4,10,11,12].includes(level)?.08:.34;app.scene.target=[0,0,0];
       if(level===7)app.scene.pitch=.9;
-      if(level===4){app.scene.yaw=-.18;app.scene.pitch=.2;}
+      if(level===4){app.scene.yaw=.26;app.scene.pitch=.08;}
       if(level===9){app.scene.yaw=0;app.scene.pitch=.15;}
       app.hideOverlay();app.hideTip();$('toasts').innerHTML='';$('menu').classList.add('hidden');$('hud').classList.remove('hidden');
       $('hudTimerBox').classList.add('hidden');$('btnMechanicInfo').classList.remove('hidden');
       $('challengePanel').classList.remove('hidden');document.body.classList.add('in-challenge');
       $('challengePanel').classList.toggle('marble-panel',level===12);
-      this.focus=level===4?[.1,1.05,0]:level===11?[0,1,0]:[0,0,0];this.zoom(0);this.bindControls();this.controls();this.syncHud();
+      this.focus=level===4?[0,.3,0]:level===11?[0,1,0]:[0,0,0];this.zoom(0);this.bindControls();this.controls();this.syncHud();
       $('banner').classList.remove('show');
       g.Sfx.start();this.help(true);
     }
     dispose(){
       $('challengePanel')?.classList.add('hidden');document.body.classList.remove('in-challenge');
       $('waterGauge')?.classList.add('hidden');
+      $('towerStatus')?.classList.add('hidden');
       $('throwGauge')?.classList.add('hidden');$('seesawCounts')?.classList.add('hidden');
       if($('challengeLabels'))$('challengeLabels').innerHTML='';
       this.app.scene.target=[0,0,0];this.app.hideTip();
@@ -44,7 +45,7 @@
       const radius=Math.max(1.7,Number(this.world.bounds)||3);
       const angle=Math.min(sc.fov/2,Math.atan(Math.tan(sc.fov/2)*sc.aspect));
       this.fit=radius/Math.sin(angle)*(this.level===4?.85:this.level===11?1.0:[8,12].includes(this.level)?1.55:1.3);
-      if([11,12].includes(this.level)){
+      if([4,10,11,12].includes(this.level)){
         const points=[...this.world.cells,...this.world.decorations].flatMap(c=>g.ChallengeProjection.worldVertices({...c,size:[1,1,1]}));
         const min=[0,1,2].map(a=>Math.min(...points.map(p=>p[a]))),max=[0,1,2].map(a=>Math.max(...points.map(p=>p[a])));
         this.focus=min.map((v,a)=>(v+max[a])/2);
@@ -53,7 +54,7 @@
         const dot=(p,v)=>p.reduce((sum,n,i)=>sum+n*v[i],0),tan=Math.tan(sc.fov/2);
         this.fit=Math.max(...points.map(point=>{
           const p=point.map((v,i)=>v-this.focus[i]);
-          return dot(p,back)+Math.max(Math.abs(dot(p,right))/(tan*sc.aspect*.82),Math.abs(dot(p,up))/(tan*.60));
+          return dot(p,back)+Math.max(Math.abs(dot(p,right))/(tan*sc.aspect*.82),Math.abs(dot(p,up))/(tan*([4,10].includes(this.level)?.72:.60)));
         }))+.1;
       }
       sc.dist=this.fit/(1+this.app.zoom*1.5);
@@ -135,7 +136,7 @@
       translucent.forEach(draw);
       if(this.world.phase==='assemble')this.assembly?.render();
       for(const effect of this.popEffects){const t={...effect.tile,alpha:1-effect.time/.32,size:effect.tile.size.map(s=>s*(1+effect.time))};draw(t);}
-      if(this.world.trajectory&&this.world.phase==='aim'){
+      if(this.world.trajectory&&this.world.phase==='aim'&&this.thrower?.charging){
         for(let i=0;i<this.world.trajectory.length;i+=2){const p=this.world.trajectory[i];const model=m4.create();m4.fromBasisScale(model,IDENTITY,p,[.035,.035,.035]);sc.drawBox(model,[1,1,1],[0,0],0,.9);}
         const end=this.world.trajectory.at(-1);
         if(end){const model=m4.create();m4.fromBasisScale(model,IDENTITY,end,[.14,.14,.035]);sc.drawBox(model,[1,1,1],[0,0],0,.9);}
@@ -151,7 +152,7 @@
     group(id){
       const w=this.world,start=w.cells.find(c=>c.id===id);
       if(!start||start.color<0||start.color>5||!w.canRemove()||(w.canRemoveCell&&!w.canRemoveCell(id)))return [];
-      if((w.water||w.seesaw||w.gears)&&this.cameraQuiet>.12&&!this.slides.size&&this.pendingProjection!==this.lastProjection){
+      if((w.tower||w.water||w.seesaw||w.gears)&&this.cameraQuiet>.12&&!this.slides.size&&this.pendingProjection!==this.lastProjection){
         this.viewLinks=g.ChallengeProjection.links(this.app.scene,this.tiles);this.lastProjection=this.pendingProjection;
       }
       const stamp=w.revision??w.cells.map(c=>c.color).join(',');
@@ -177,11 +178,7 @@
     clearHover(){this.hover=[];this.app.hideTip();}
     click(e){
       if(this.app.state!=='play'||this.intro||this.slides.size)return;
-      if(this.world.phase==='aim'){
-        const ray=this.app.scene._ray(e.clientX/innerWidth*2-1,1-e.clientY/innerHeight*2);
-        if(Math.abs(ray.d[2])>1e-6){const t=((this.world.aimPlaneZ||0)-ray.o[2])/ray.d[2];if(t>0)this.action('aim',{x:ray.o[0]+ray.d[0]*t,y:ray.o[1]+ray.d[1]*t});}
-        return;
-      }
+      if(this.world.phase==='aim')return;
       const id=this.pick(e);if(id<0)return;
       if(this.world.phase==='assemble'){const c=this.world.cells.find(c=>c.id===id);this.action('select',c.component);return;}
       const ids=this.group(id);if(ids.length<2){g.Sfx.invalid();return;}
@@ -289,22 +286,9 @@
         const m=w.marble,c=COLORS[m.color];
         $('marbleStatus').innerHTML='<i class="ammo-color" style="background:rgb('+c.map(v=>Math.round(v*255)).join(',')+')"></i>'+Math.min(3,m.drops+1)+' / 3 次 · 碰撞 +100 · 落槽加分';
       }
-      const gauge=$('waterGauge');
-      if(gauge){
-        gauge.classList.toggle('hidden',this.level!==4);
-        if(this.level===4){
-          const water=w.water,capacity=water.capacity||100;
-          const percent=Math.max(0,Math.min(100,100*(water.amount??capacity)/capacity));
-          const needed=(water.required||35)*(1-water.progress),line=100*needed/capacity;
-          const insufficient=(water.amount??capacity)+1e-8<needed;
-          $('waterGaugeValue').textContent=Math.round(percent)+'%';
-          $('waterGaugeFill').style.height=percent+'%';$('waterGaugeLine').style.bottom=line+'%';
-          $('waterGaugeTrack').setAttribute('aria-valuenow',Math.round(percent));
-          gauge.classList.toggle('insufficient',insufficient);
-          const state=insufficient?'水量不足':water.progress>=1?'火已熄灭':water.leaking?'管道破损 · 正在漏水':water.flowing?'出水灭火中':'等待疏通';
-          if($('waterGaugeState').textContent!==state)$('waterGaugeState').textContent=state;
-        }
-      }
+      $('waterGauge')?.classList.add('hidden');
+      const towerStatus=$('towerStatus');
+      if(towerStatus){towerStatus.classList.toggle('hidden',this.level!==4);if(w.tower)towerStatus.textContent=w.status;}
       const ammo=$('challengeAmmo');if(ammo){const next=w.ammo?.[0],color=COLORS[next];ammo.innerHTML=(color?'<i class="ammo-color" style="background:rgb('+color.map(c=>Math.round(c*255)).join(',')+')"></i>':'')+'剩余 '+(Array.isArray(w.ammo)?w.ammo.length:0)+' 块';}
       this.controls();
     }

@@ -1,53 +1,28 @@
-/* Cursor-directed throws: charge changes range; release commits the preview. */
+/* Drag the loaded cube backwards; release commits the ballistic preview. */
 (function(g){
-  'use strict';
-  class ChallengeThrow{
-    constructor(game){this.game=game;this.charging=false;this.power=0;this.elapsed=0;this.pointerId=null;this.cursor=null;}
-    get world(){return this.game.world;}
-    enabled(){return this.world.phase==='aim'&&this.game.app.state==='play'&&!this.game.intro&&!this.world.result;}
-    aim(e){
-      const sc=this.game.app.scene,canvas=sc.canvas||sc.gl?.canvas,rect=canvas?.getBoundingClientRect?.();
-      const width=rect?.width||g.innerWidth||sc.w,height=rect?.height||g.innerHeight||sc.h;
-      const ray=sc._ray((e.clientX-(rect?.left||0))/width*2-1,1-(e.clientY-(rect?.top||0))/height*2);
-      if(Math.abs(ray.d[2])<1e-8)return;
-      const t=(.09-ray.o[2])/ray.d[2];if(t<0)return;
-      this.cursor={x:ray.o[0]+ray.d[0]*t,y:ray.o[1]+ray.d[1]*t};
-      this.preview();
-    }
-    preview(){if(this.cursor)this.world.action('throw-aim',{...this.cursor,power:this.power});}
-    pointerDown(e){
-      if(!this.enabled()||(e.button!==undefined&&e.button!==0))return false;
-      if(this.charging){
-        if(e.pointerId!==undefined&&e.pointerId!==this.pointerId){this.cancel();return false;}
-        return true;
-      }
-      if(this.world.projectile||!this.world.ammo.length)return true;
-      this.pointerId=e.pointerId;this.charging=true;this.elapsed=0;this.power=0;this.aim(e);return true;
-    }
-    pointerMove(e){
-      if(!this.enabled())return false;
-      // Secondary-button drag and multi-touch remain available to the camera.
-      if(e.buttons&2)return false;
-      if(this.charging&&e.pointerId!==undefined&&e.pointerId!==this.pointerId)return false;
-      this.aim(e);return true;
-    }
-    pointerUp(e){
-      if(e.button!==undefined&&e.button!==0)return false;
-      if(!this.charging||e.pointerId!==undefined&&e.pointerId!==this.pointerId)return false;
-      if(!this.enabled()){this.cancel();return true;}
-      this.aim(e);this.charging=false;this.pointerId=null;
-      this.world.action('shoot');return true;
-    }
-    frame(dt){
-      if(!this.enabled()){if(this.charging)this.cancel();return;}
-      if(!this.charging)return;
-      this.elapsed=(this.elapsed+Math.max(0,Number(dt)||0))%8;
-      this.power=1-Math.abs(this.elapsed/4-1);this.preview();
-    }
-    cancel(){
-      const consumed=this.charging;this.charging=false;this.pointerId=null;this.elapsed=0;this.power=0;this.world.throwPower=0;
-      if(this.enabled())this.preview();return consumed;
-    }
+ 'use strict';
+ class ChallengeThrow{
+  constructor(game){this.game=game;this.charging=false;this.power=0;this.pointerId=null;}
+  get world(){return this.game.world;}
+  enabled(){return this.world.phase==='aim'&&this.game.app.state==='play'&&!this.game.intro&&!this.world.result;}
+  ray(e){const sc=this.game.app.scene,rect=(sc.canvas||sc.gl?.canvas)?.getBoundingClientRect?.();return sc._ray((e.clientX-(rect?.left||0))/(rect?.width||g.innerWidth||sc.w)*2-1,1-(e.clientY-(rect?.top||0))/(rect?.height||g.innerHeight||sc.h)*2);}
+  planePoint(e){const ray=this.ray(e),a=this.world.sling.anchor,n=this.planeNormal,den=ray.d.reduce((s,v,i)=>s+v*n[i],0);if(Math.abs(den)<1e-7)return null;const t=a.reduce((s,v,i)=>s+(v-ray.o[i])*n[i],0)/den;return t>0?ray.o.map((v,i)=>v+ray.d[i]*t):null;}
+  aim(e){const p=this.planePoint(e);if(!p)return;let pull=p.map((v,i)=>v-this.grab[i]),length=Math.hypot(...pull);if(length>1.05)pull=pull.map(v=>v*1.05/length);this.power=Math.min(1,length/1.05);this.world.action('throw-aim',{pull});}
+  pointerDown(e){
+   if(!this.enabled()||(e.button!==undefined&&e.button!==0))return false;
+   if(this.charging){if(e.pointerId!==this.pointerId){this.cancel();return false;}return true;}
+   if(this.world.projectile||!this.world.ammo.length)return false;
+   const sc=this.game.app.scene,p=sc.project(this.world.sling.anchor);if(!p)return false;
+   const rect=(sc.canvas||sc.gl?.canvas)?.getBoundingClientRect?.(),x=e.clientX-(rect?.left||0),y=e.clientY-(rect?.top||0);
+   const edge=sc.project(this.world.sling.anchor.map((v,i)=>v+(i===0?.18:0))),radius=Math.max(24,edge?Math.hypot(edge[0]-p[0],edge[1]-p[1]):24);
+   if(Math.hypot(x-p[0],y-p[1])>radius)return false;
+   const n=sc.eye.map((v,i)=>v-sc.target[i]),len=Math.hypot(...n);this.planeNormal=n.map(v=>v/len);this.grab=this.planePoint(e);if(!this.grab)return false;
+   this.pointerId=e.pointerId;this.charging=true;this.power=0;this.world.action('throw-aim',{pull:[0,0,0]});return true;
   }
-  g.ChallengeThrow=ChallengeThrow;
+  pointerMove(e){if(!this.enabled()||!this.charging||(e.buttons&2)||e.pointerId!==undefined&&e.pointerId!==this.pointerId)return false;this.aim(e);return true;}
+  pointerUp(e){if(e.button!==undefined&&e.button!==0||!this.charging||e.pointerId!==undefined&&e.pointerId!==this.pointerId)return false;if(!this.enabled()){this.cancel();return true;}this.aim(e);const fire=this.power>.035;this.charging=false;this.pointerId=null;if(fire)this.world.action('shoot');else this.cancel();return true;}
+  frame(){if(!this.enabled()&&this.charging)this.cancel();}
+  cancel(){const consumed=this.charging;this.charging=false;this.pointerId=null;this.power=0;this.world.action('throw-aim',{pull:[0,0,0]});return consumed;}
+ }
+ g.ChallengeThrow=ChallengeThrow;
 })(typeof window!=='undefined'?window:globalThis);

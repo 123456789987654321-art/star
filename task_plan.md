@@ -50,3 +50,8 @@ Implementation complete for all listed screenshot corrections and follow-ups.187
 User requests max zoom across ALL levels fit full main geometry inside viewport with small margin; slider, wheel and pinch share cap; recompute on rotation/resize. Automatically upload verified fixes to star/main per explicit user authorization. Implement shared Scene camera limit based on live geometry bounds and actual camera target; preserve normal/challenge paths. Verify desktop/mobile all12 and normal15 including rotation.
 
 Zoom correction complete:189 tests, all54 desktop/mobile maximum-zoom cases and visual QA passed. Automatic upload authorized.
+
+## Active: separate challenge 4 and challenge 10 replacements
+- Confirmed: level4 replaces water with a tower rescue. Paired colored slabs/columns are removable; fixed gray solids remain; excessive fall or crushing loses, safe ground arrival wins.
+- Confirmed: level10 stays a separate target level, switches to drag-back slingshot, with exactly5 holes on EACH target and10 shots total. No timed charging.
+- Core modules and integration complete. Final190 Node tests passed; real Edge QA errors=[]/failed=[], including independent tower win/fall/crush and actual slingshot pointer drag. Desktop sling and mobile tower screenshots visually checked; independent review no blockers. Ready for automatic upload.

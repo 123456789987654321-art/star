@@ -35,23 +35,30 @@ const evaluate=async expression=>{const r=await call('Runtime.evaluate',{express
  fs.writeFileSync(path.join(out,'assembly-glow.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
  results.push(await evaluate(`(()=>{const g=App.challenge,confirmed=!g.world.assemblyPending;document.querySelector('[data-challenge="complete"]').click();return {desktopPlacementConfirmed:confirmed,assemblyCompleted:g.world.phase==='play',assigned:g.world.cells.every(c=>c.color>=0&&c.color<6)};})()`));
  await evaluate(`qaEnter(10);App.challenge.intro=0;window.qaAmmo=App.challenge.world.ammo.length;`);
- const throwPoint=await evaluate(`(()=>{const p=App.scene.project([-1.6,0,.09]);return {x:p[0],y:p[1]};})()`);
- await call('Input.dispatchMouseEvent',{type:'mousePressed',...throwPoint,button:'left',clickCount:1});await delay(400);
- results.push(await evaluate(`({throwCharging:App.challenge.thrower.charging,throwPowerIncreases:App.challenge.thrower.power>0,throwWaitsForRelease:App.challenge.world.ammo.length===qaAmmo})`));
- await call('Input.dispatchMouseEvent',{type:'mouseReleased',...throwPoint,button:'left',clickCount:1});
- results.push(await evaluate(`({throwReleased:!App.challenge.thrower.charging,throwConsumesOne:App.challenge.world.ammo.length===qaAmmo-1})`));
+ await delay(200);
+ const throwPoints=await evaluate(`(()=>{const a=App.challenge.world.sling.anchor,p=App.scene.project(a),q=App.scene.project(a.map((v,i)=>v+[.45,-.55,0][i]));return {start:{x:p[0],y:p[1]},end:{x:q[0],y:q[1]}};})()`);
+ await call('Input.dispatchMouseEvent',{type:'mousePressed',...throwPoints.start,button:'left',clickCount:1});
+ await call('Input.dispatchMouseEvent',{type:'mouseMoved',...throwPoints.end,button:'left',buttons:1});
+ await evaluate(`window.qaPullPower=App.challenge.thrower.power;window.qaThrowPreview=JSON.stringify(App.challenge.world.trajectory);`);await delay(250);
+ results.push(await evaluate(`({slingDragging:App.challenge.thrower.charging,slingPullHasPower:qaPullPower>0,slingNoTimedCharge:App.challenge.thrower.power===qaPullPower,throwWaitsForRelease:App.challenge.world.ammo.length===qaAmmo,tenShots:qaAmmo===10,fiveHolesEach:[0,1].every(i=>App.challenge.world.cells.filter(c=>c.targetIndex===i&&c.hole).length===5)})`));
+ fs.writeFileSync(path.join(out,'sling-drag.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+ await call('Input.dispatchMouseEvent',{type:'mouseReleased',...throwPoints.end,button:'left',clickCount:1});
+ results.push(await evaluate(`({throwReleased:!App.challenge.thrower.charging,throwConsumesOne:App.challenge.world.ammo.length===qaAmmo-1,slingFollowsPreview:JSON.stringify(App.challenge.world.projectile?.path)===qaThrowPreview})`));
  results.push(await evaluate(`(()=>{qaEnter(10);const g=App.challenge;g.intro=0;const hole=g.world.cells.find(c=>c.hole);g.action('aim',{x:hole.center[0],y:hole.center[1]});g.action('shoot');g.world.update(1.3);const filled=hole.color>=0;while(g.world.ammo.length){g.action('shoot');g.world.update(1.3);}return {targetHoleFilled:filled,targetElimination:g.world.phase==='play'};})()`));
- results.push(await evaluate(`(()=>{qaEnter(4);const g=App.challenge;g.intro=0;g.world.remove(g.world.cells.filter(c=>!c.seal).map(c=>c.id));for(let i=0;i<100;i++)g.world.update(.05);g.checkResult();return {waterWon:g.world.result==='win',waterPersisted:!!JSON.parse(localStorage.getItem('popstar3d.progress.challenge.v2')).cleared.hasOwnProperty('4')};})()`));
- await evaluate(`qaEnter(4);App.challenge.intro=0;App.challenge.world.remove(App.challenge.world.cells.filter(c=>!c.seal).map(c=>c.id));App.challenge.world.update(.6);App.challenge.syncHud();`);await delay(80);
- results.push(await evaluate(`({waterGaugeVisible:!document.getElementById('waterGauge').classList.contains('hidden'),waterDepletes:App.challenge.world.water.amount<100,waterJetVisible:App.challenge.world.waterVisuals.jet.alpha>0})`));
- fs.writeFileSync(path.join(out,'water-flow.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+ await evaluate(`qaEnter(4);App.challenge.intro=0;document.getElementById('banner').classList.remove('show');`);await delay(200);
+ results.push(await evaluate(`({towerReady:!!App.challenge.world.tower,towerPersonAlive:App.challenge.world.tower.person.alive,towerFiveFloors:App.challenge.world.tower.floors.length===5})`));
+ fs.writeFileSync(path.join(out,'tower-initial.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+ await evaluate(`window.qaTowerFloors=App.challenge.world.tower.floors.slice().reverse();for(const ids of qaTowerFloors.slice(0,2)){App.challenge.world.remove(ids);App.challenge.world.update(2);}App.challenge.syncHud();`);await delay(100);
+ results.push(await evaluate(`({towerMidwayAlive:App.challenge.world.tower.person.alive&&!App.challenge.world.result,towerMidwayDescended:App.challenge.world.tower.person.y<2&&App.challenge.world.tower.person.y>App.challenge.world.tower.groundY})`));
+ fs.writeFileSync(path.join(out,'tower-midway.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+ results.push(await evaluate(`(()=>{const g=App.challenge;for(const ids of qaTowerFloors.slice(2)){g.world.remove(ids);g.world.update(2);}g.checkResult();const saved=JSON.parse(localStorage.getItem('popstar3d.progress.challenge.v2'));return {towerWon:g.world.result==='win',towerPersisted:Object.prototype.hasOwnProperty.call(saved.cleared,'4'),towerSafeGround:g.world.tower.person.alive&&Math.abs(g.world.tower.person.y-g.world.tower.groundY)<1e-6};})()`));
  results.push(await evaluate(`(()=>{qaEnter(12);const g=App.challenge;g.intro=0;g.world.cells.forEach(c=>c.color=-1);for(let drop=0;drop<3;drop++){g.controls();document.querySelector('[data-challenge="release"]').click();for(let i=0;i<2000&&g.world.marble.released;i++)g.world.update(.02);}g.checkResult();App.restart();return {restartZero:App.score===0&&App.challenge.world.score===0,marbleThreeDrops:g.world.marble.drops===3,marbleCenterScores:g.world.score===1500,marbleWon:g.world.result==='win'};})()`));
  await evaluate(`App.pause();window.qaPausedTime=App.challenge.world.time`);await delay(250);results.push(await evaluate(`({pauseFrozen:qaPausedTime===App.challenge.world.time})`));await evaluate('App.resume()');
  results.push(await evaluate(`(()=>{document.getElementById('btnMechanicInfo').click();const reopened=App.state==='paused'&&document.getElementById('ovCard').textContent.includes('我知道了');document.querySelector('#overlay [data-act="resume"]').click();return {infoReopens:reopened,infoDismissed:App.state==='play'&&document.getElementById('overlay').classList.contains('hidden')};})()`));
  await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await evaluate(`qaEnter(12);App.challenge.intro=0;document.getElementById('banner').classList.remove('show');`);await delay(350);
  fs.writeFileSync(path.join(out,'mobile-marble.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
  await evaluate(`qaEnter(4);App.challenge.intro=0;document.getElementById('banner').classList.remove('show');`);await delay(200);
- fs.writeFileSync(path.join(out,'mobile-water.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+ fs.writeFileSync(path.join(out,'mobile-tower.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
  await evaluate(`qaEnter(8);App.challenge.intro=0;App.challenge.action('add','prism');App.challenge.action('add','frustum');document.getElementById('banner').classList.remove('show');`);await delay(350);
  assemblyPoint=await evaluate('qaAssemblyPoint()');
  await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...assemblyPoint,id:1}]});
@@ -76,10 +83,10 @@ const evaluate=async expression=>{const r=await call('Runtime.evaluate',{express
  }
  await call('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
  await evaluate(`qaEnter(4);App.challenge.intro=0;App.scene.yaw=-.65;App.scene.pitch=.35;document.getElementById('banner').classList.remove('show');`);await delay(200);
- results.push(await evaluate(`({visibleWater:App.challenge.world.waterVisuals.waterVolume.alpha>.6,waterRipples:App.challenge.world.waterVisuals.ripples.length>=3})`));
- fs.writeFileSync(path.join(out,'water-through-wall.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
- results.push(await evaluate(`(()=>{const w=App.challenge.world,seal=w.cells.find(c=>c.sideSeal&&c.grid[0]===-1&&c.grid[2]===3),inner=w.cells.find(c=>c.barrier==='slope'&&c.grid[0]===0&&c.grid[2]===3);w.remove([seal.id,inner.id,...w.cells.filter(c=>c.component===1).map(c=>c.id)]);w.update(.1);return {sideWallLeaks:w.water.leaking&&w.water.leaked>0};})()`));
- await delay(100);fs.writeFileSync(path.join(out,'water-side-leak.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+ results.push(await evaluate(`(()=>{const g=App.challenge,w=g.world;w.remove(w.tower.floors.slice(-2).flat());w.update(3);g.checkResult();return {towerFallFailure:w.result==='lose'&&w.tower.failure==='fall',towerFallPersonDead:!w.tower.person.alive};})()`));
+ await delay(100);fs.writeFileSync(path.join(out,'tower-fall.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+ results.push(await evaluate(`(()=>{qaEnter(4);const g=App.challenge,w=g.world;g.intro=0;w.remove(w.tower.roofSupports.flat());w.update(3);g.checkResult();return {towerCrushFailure:w.result==='lose'&&w.tower.failure==='crush',towerCrushPersonDead:!w.tower.person.alive};})()`));
+ await delay(100);fs.writeFileSync(path.join(out,'tower-crush.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
  if(process.env.ZOOM_QA){
   for(const [width,height] of [[1280,900],[390,844]]){
    await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<500});

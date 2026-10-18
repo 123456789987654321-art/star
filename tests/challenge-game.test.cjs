@@ -40,7 +40,7 @@ function integrated(level=1,acknowledge=true){
   const node=()=>({classList:{add(){},remove(){},toggle(){}},style:{},dataset:{},innerHTML:'',textContent:'',setAttribute(){},appendChild(){},remove(){}});
   const document={readyState:'loading',addEventListener(){},body:node(),createElement:node,getElementById(id){if(!nodes.has(id))nodes.set(id,node());return nodes.get(id);}};
   const ctx=vm.createContext({console,document,innerWidth:800,innerHeight:800,performance:{now:()=>0},setTimeout(){},localStorage:{getItem(){return null;},setItem(){}}});ctx.window=ctx;
-  for(const file of ['mathx','board','mechanics','scene','challenge-geometry','challenge-world','challenge-projection','challenge-thumbnails','challenge-assembly','challenge-throw','challenge-game','app'])vm.runInContext(fs.readFileSync('js/'+file+'.js','utf8'),ctx);
+  for(const file of ['mathx','board','mechanics','scene','challenge-geometry','challenge-tower','challenge-world','challenge-projection','challenge-thumbnails','challenge-assembly','challenge-throw','challenge-game','app'])vm.runInContext(fs.readFileSync('js/'+file+'.js','utf8'),ctx);
   ctx.Sfx={start(){},pop(){},invalid(){},levelClear(){},gameOver(){}};
   const app=ctx.App,scene=Object.create(ctx.Scene.prototype);
   Object.assign(scene,{w:800,h:800,dpr:1,fov:Math.PI/4,aspect:1,time:0,shakeT:0,target:[0,0,0],vp:ctx.MX.m4.create(),invVP:ctx.MX.m4.create(),particles:{clear(){},update(){},burst(){}},drawPoly(){},drawBox(){},drawParticles(){}});
@@ -69,6 +69,19 @@ function seamFixture(){
   assert.deepEqual(JSON.parse(JSON.stringify(f.game.viewLinks)),[[0,1]],'fixture has a real depth-visible seam');
   return f;
 }
+
+test('tower rescue and slingshot targets stay independent and tower only wins on safe descent',()=>{
+ const tower=integrated(4),w=tower.game.world;
+ assert.ok(w.tower);assert.equal(w.water,undefined);assert.equal(w.ammo,undefined);
+ assert.equal(tower.game.thrower,null);assert.match(tower.nodes.get('hudMode').textContent,/高楼/);
+ w.score=9999;assert.equal(w.finish(),null);
+ const initial=w.tower.person.y;tower.app.state='paused';tower.game.frame(1);assert.equal(w.tower.person.y,initial);
+ tower.app.state='play';for(const ids of w.tower.floors.slice().reverse()){w.remove(ids);for(let i=0;i<20;i++)tower.game.frame(.1);}
+ assert.equal(w.result,'win');assert.equal(tower.app.state,'clear');
+ const target=integrated(10);assert.ok(target.game.thrower);assert.equal(target.game.world.tower,undefined);
+ for(const side of [0,1])assert.equal(target.game.world.cells.filter(c=>c.targetIndex===side&&c.hole).length,5);
+ assert.equal(target.game.world.ammo.length,10);
+});
 test('camera movement immediately removes old projected links and rebuilds after settling',()=>{
   const {game,scene}=seamFixture();game.hover=[0,1];game.hint=[0,1];
   scene.yaw=.12;game.frame(.01);
@@ -119,16 +132,6 @@ test('an emptied challenge automatically settles after its last move',()=>{
   game.world.remove(game.world.cells.map(c=>c.id));
   game.frame(.05);
   assert.equal(game.world.result,'win');assert.equal(app.state,'clear');
-});
-
-test('water gauge tracks remaining supply and the remaining fire requirement',()=>{
-  const {game,nodes}=integrated(4);
-  Object.assign(game.world.water,{capacity:100,amount:70,required:35,progress:.4,leaking:true});game.syncHud();
-  assert.equal(nodes.get('waterGaugeFill').style.height,'70%');
-  assert.equal(nodes.get('waterGaugeLine').style.bottom,'21%');
-  assert.match(nodes.get('waterGaugeState').textContent,/漏水/);
-  game.world.water.amount=15;game.syncHud();
-  assert.match(nodes.get('waterGaugeState').textContent,/不足/);
 });
 
 test('returning to level selection keeps the current mode and earned progress from play or pause',()=>{

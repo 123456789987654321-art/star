@@ -1,6 +1,7 @@
 /* Independent untimed challenge rules. Cell centers are world-space; vertices are local. */
 (function(root){
   'use strict';
+  if(typeof module!=='undefined'&&module.exports&&!root.ChallengeTower)require('./challenge-tower.js');
   const PALETTE=[[.97,.24,.32],[.64,.34,.99],[.20,.85,.50],[.22,.58,1],[1,.80,.22],[1,.44,.79]];
   const I=[1,0,0,0,1,0,0,0,1], shapes=['tetrahedron','cylinder','sphere','prism','frustum','torus'];
   const add=(a,b)=>a.map((v,i)=>v+b[i]);
@@ -115,7 +116,7 @@
         this.selected=null;
         this.bounds=4;
       }
-      if(n===4)this._waterBuild();
+      if(n===4)root.ChallengeTower.build(this);
       if(n===9)this._gearsBuild();
       if(n===10)this._targetBuild();
       if(n===11){
@@ -141,7 +142,7 @@
     }
     canRemoveCell(id){
       const c=this.cells.find(c=>c.id===id);
-      return !!c&&!c.immutable&&this.canRemove()&&!(this.level===4&&c.component===1&&this.water.gateMoving);
+      return !!c&&!c.immutable&&this.canRemove();
     }
     remove(ids){
       this.moves=[];
@@ -159,7 +160,7 @@
       if(!removed.length)return removed;
       this.score+=Math.round(5*removed.length*removed.length*scoreMultiplier);
       if(this.seesaw)this.lastMultiplier=scoreMultiplier;
-      if(this.level!==12){
+      if(this.level!==12&&this.level!==4){
         const tracks=new Map();
         for(const c of this.cells){
           if(c.track==='fixed')continue;
@@ -182,6 +183,7 @@
       }
       this.revision++;
       this._contactCache=null;
+      if(this.level===4)root.ChallengeTower.afterRemove(this,removed);
       if(this.seesaw)this._seesawUpdate(0);
       return removed;
     }
@@ -327,20 +329,21 @@
       if((name==='aim'||name==='throw-aim')&&this.level===10&&this.phase==='aim'){
         const x=Number(value.x)||0,y=Number(value.y)||0;
         if(name==='throw-aim'){
-          this.throwPower=Math.max(0,Math.min(1,Number(value.power)||0));
-          const dx=x,dy=y+1.7,length=Math.hypot(dx,dy),range=.3+5.7*this.throwPower;
-          this.aim={x:length>1e-8?dx/length*range:0,y:-1.7+(length>1e-8?dy/length:1)*range};
-        }else this.aim={x,y};
+          this.sling.pull=(value.pull||[0,0,0]).map(v=>Number(v)||0);
+          this.throwPower=Math.min(1,Math.hypot(...this.sling.pull)/1.05);
+          this.aim={x:-this.sling.pull[0]*4,y:-1.7-this.sling.pull[1]*4};
+        }else {this.sling.pull=[0,0,0];this.aim={x,y};}
         this._preview();
         return '已更新落点';
       }
       if(name==='shoot'&&this.phase==='aim'&&!this.projectile&&this.ammo.length){
         const color=this.ammo.shift();
         this.projectile={
-          time:0,color,path:this.trajectory.map(p=>p.slice()),hit:{
+          time:0,color,start:this.launch.start.slice(),velocity:this.launch.velocity.slice(),gravity:this.launch.gravity,path:this.trajectory.map(p=>p.slice()),hit:{
             ...this.previewHit
           }
         };
+        this.sling.pull=[0,0,0];this._slingVisual();
         return '投射中';
       }
       if(name==='shift'&&this.level===11){
@@ -584,111 +587,12 @@
       }
       return seen.size===models.length?'':'零件尚未连接，请使用吸附';
     }
-    _waterBuild(){
-      const step=.4;
-      this.bounds=6.7;
-      this.water={
-        capacity:100,amount:100,required:35,used:0,leaked:0,progress:0,
-        leaking:false,flowing:false,gateMoving:false,gateOffset:-1.2,leakPosition:null,
-        layout:{tankMin:[-3.6,0,-1.4],tankMax:[-.8,5.6,1.4],
-          pipePoints:[[-2.2,0,0],[-2.2,-1,0],[1,-2.4,0],[2,-2.4,0]],pipeRadius:.4,
-          fireCenter:[3.4,-4.25,0],step}
-      };
-      this.components.push({id:0,name:'贯穿斜板与密封'}, {id:1,name:'固定挡板'});
-      const block=(grid,component,extra={})=>{
-        const center=[-3.4+grid[0]*step,.2+grid[1]*step,-1.2+grid[2]*step];
-        const c=this._cell(center,cube(step/2,step/2,step/2),component,{grid,track:'fixed',...extra});
-        c.local=c.center.slice();
-        return c;
-      };
-      // The slope crosses both X walls. Only the two internal Z-edge strips
-      // are immutable; exposed ends seal the actual wall penetrations.
-      for(let x=-1;x<=7;x++)for(let z=0;z<7;z++){
-        const exterior=x<0||x>6,immutable=!exterior&&(z===0||z===6);
-        const row=2+Math.floor(Math.max(0,Math.min(6,x))/3),sideSeal=exterior;
-        const c=block([x,row,z],0,{barrier:'slope',exterior,immutable,sideSeal,seal:sideSeal,
-          ...(sideSeal?{leakGrid:[x<0?0:6,row,z]}:{}),
-          ...(immutable?{color:6}:exterior||x===0||x===6?{color:5}:{})});
-        c.center[1]=.2+(2+x/3)*step;c.local=c.center.slice();
-        c.poly={vertices:c.poly.vertices.map(v=>[v[0],v[1]+v[0]/3,v[2]]),faces:c.poly.faces};
-      }
-      // Pink floor seals surround the open outlet joint; they never settle.
-      for(let x=2;x<=4;x++)for(let z=2;z<=4;z++){
-        if(x===3&&z===3)continue;
-        block([x,0,z],0,{seal:true,color:5});
-      }
-      for(let x=0;x<7;x++)for(let z=0;z<7;z++){
-        const c=block([x,9,z],1);
-        c.center[1]+=this.water.gateOffset;
-      }
-      if(root.ChallengeWaterVisual)root.ChallengeWaterVisual.create(this);
-    }
-    _waterUpdate(dt){
-      const water=this.water;
-      water.gateMoving=false;
-      const offset=-1.2;
-      water.gateOffset=offset;
-      let moved=false;
-      for(const c of this.cells)if(c.component===1&&Math.abs(c.center[1]-c.local[1]-offset)>1e-8){
-        c.center[1]=c.local[1]+offset;
-        moved=true;
-      }
-      if(moved)this.revision++;
-      // A moving plate occupies both crossed lattice layers. Only changed
-      // solids or a new plate lattice position require another flood fill.
-      const gateRow=9+offset/.4,low=Math.floor(gateRow+1e-8),high=Math.ceil(gateRow-1e-8);
-      const key=low+':'+high+':'+this.cells.map(c=>c.color>=0?'1':'0').join('');
-      if(water.routeKey!==key){
-        const occupied=new Set();
-        for(const c of this.cells)if(c.color>=0){
-          if(c.component===1){
-            occupied.add([c.grid[0],low,c.grid[2]].join(','));
-            occupied.add([c.grid[0],high,c.grid[2]].join(','));
-          }else occupied.add(c.grid.join(','));
-        }
-        const queue=[],seen=new Set(),directions=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
-        for(let x=0;x<7;x++)for(let z=0;z<7;z++){
-          const grid=[x,13,z],key=grid.join(',');
-          if(!occupied.has(key)){queue.push(grid);seen.add(key);}
-        }
-        for(let i=0;i<queue.length;i++)for(const d of directions){
-          const grid=queue[i].map((v,axis)=>v+d[axis]),key=grid.join(',');
-          if(grid[0]<0||grid[0]>6||grid[1]<0||grid[1]>13||grid[2]<0||grid[2]>6||seen.has(key)||occupied.has(key))continue;
-          seen.add(key);queue.push(grid);
-        }
-        water.routeKey=key;
-        water.outletAccessible=seen.has('3,0,3');
-        water.failedSeal=this.cells.find(c=>c.seal&&c.color<0&&seen.has((c.leakGrid||c.grid).join(',')))||null;
-      }
-      water.leakPosition=water.failedSeal?water.failedSeal.center.slice():null;
-      water.leaking=water.amount>0&&!!water.failedSeal;
-      water.flowing=water.amount>0&&water.outletAccessible;
-      const fireRate=water.flowing?8:0,leakRate=water.leaking?15:0;
-      if(fireRate+leakRate>0){
-        const duration=Math.min(dt,water.amount/(fireRate+leakRate),fireRate?(water.required-water.used)/fireRate:dt);
-        water.used=Math.min(water.required,water.used+fireRate*duration);
-        water.leaked+=leakRate*duration;
-        water.amount=Math.max(0,water.capacity-water.used-water.leaked);
-      }
-      water.progress=water.used/water.required;
-      this.status='剩余水量 '+Math.round(water.amount)+' / '+water.capacity+'；灭火 '+Math.round(water.progress*100)+'%';
-      if(water.leaking)this.status+='；密封破损正在漏水';
-      else if(!water.flowing)this.status+='；打通水箱内两层挡板，保留粉色密封';
-      if(water.used>=water.required-1e-8){
-        water.used=water.required;water.progress=1;
-        this.score+=500;this.result='win';this.phase='finished';
-        this.status='火已扑灭！剩余水量 '+Math.round(water.amount);
-      }else if(water.amount<water.required-water.used-1e-8){
-        this.result='lose';this.phase='finished';
-        this.status='漏水导致剩余水量不足，无法扑灭火焰，请重试';
-      }
-      if(root.ChallengeWaterVisual)root.ChallengeWaterVisual.update(this,dt);
-    }
     _targetBuild(){
       this.phase='aim';
       this.bounds=4;
       this.ammo=[];
       this.throwPower=0;
+      this.sling={anchor:[0,-1.7,2.4],pull:[0,0,0],bands:[]};
       this.targetRadius=1.25;
       this.targetCenters=[[-1.6,0,0],[1.6,0,0]];
       this.targetLabels=this.targetCenters.flatMap((c,target)=>Array.from({
@@ -716,23 +620,57 @@
           const c=this._cell(center,poly,target,{clipped:true,
             targetIndex:target,ring,segment:segment++,grid:[x,y,0],track:'target:'+target+':'+x,order:y
           });
-          if((c.segment+target)%17===0){
+          if([[0,0],[-3,3],[3,3],[-3,-3],[3,-3]].some(p=>p[0]===x&&p[1]===y)){
             c.color=-1;
             c.hole=true;
             this.ammo.push(Math.floor(this.rng()*6));
           }
         }
       }
+      this._box([0,-2.2,2.4],[.10,.5,.10],[.43,.25,.12]);
+      for(const x of [-.34,.34])this._box([x,-1.88,2.4],[.065,.32,.065],[.51,.31,.15]);
+      this.sling.bands=[-1,1].map(()=>this._box([0,0,0],[.025,.5,.025],[.24,.12,.06]));
+      this.sling.loaded=this._box(this.sling.anchor,[.14,.14,.14],PALETTE[this.ammo[0]]);
       this._preview();
     }
+    _slingVisual(){
+      const s=this.sling,p=s.anchor.map((v,i)=>v+s.pull[i]);
+      s.loaded.center=p;s.loaded.rgb=PALETTE[this.ammo[0]]||PALETTE[0];s.loaded.alpha=this.ammo.length&&!this.projectile?1:0;
+      s.bands.forEach((band,i)=>{
+        const a=[i?.34:-.34,-1.56,2.4],d=p.map((v,j)=>v-a[j]),length=Math.hypot(...d),y=d.map(v=>v/length);
+        const xl=Math.hypot(y[0],y[1])||1,x=[y[1]/xl,-y[0]/xl,0],z=[x[1]*y[2],-x[0]*y[2],x[0]*y[1]-x[1]*y[0]];
+        band.center=a.map((v,j)=>(v+p[j])/2);band.poly=cube(.025,length/2,.025);band.basis=[...x,...y,...z];
+      });
+    }
     _preview(){
-      const start=[0,-1.7,4],end=[this.aim.x,this.aim.y,.09];
+      this._slingVisual();
+      const start=this.sling.anchor.map((v,i)=>v+this.sling.pull[i]),end=[this.aim.x,this.aim.y,.09];
+      const duration=1.2,gravity=6/(duration*duration);
+      this.launch={start,gravity,velocity:end.map((v,i)=>(v-start[i])/duration+(i===1?gravity*duration/2:0))};
       this.aimPlaneZ=.09;
       const point=t=>[start[0]+(end[0]-start[0])*t,start[1]+(end[1]-start[1])*t+3*t*(1-t),start[2]+(end[2]-start[2])*t];
-      let hit=null,stop=1;
+      let hit=null,stop=1,normal=[0,0,1];
       for(const c of this.cells){
         if(c.color<0&&!c.hole)continue;
-        const verts=this._vertices(c),front=Math.max(...verts.map(v=>v[2])),t=(start[2]-front)/(start[2]-end[2]);
+        const verts=this._vertices(c);
+        // Attached cubes can be entered from a side on an oblique throw.
+        // Intersect the analytic parabola with all six axis-aligned faces.
+        if(c.attached){
+          const lo=[0,1,2].map(a=>Math.min(...verts.map(v=>v[a]))),hi=[0,1,2].map(a=>Math.max(...verts.map(v=>v[a])));
+          for(let axis=0;axis<3;axis++)for(const sign of [-1,1]){
+            const plane=sign<0?lo[axis]:hi[axis],a=axis===1?-3:0,b=end[axis]-start[axis]+(axis===1?3:0),d=start[axis]-plane;
+            const discriminant=b*b-4*a*d;
+            const roots=a?(discriminant>=0?[(-b-Math.sqrt(discriminant))/(2*a),(-b+Math.sqrt(discriminant))/(2*a)]:[]):Math.abs(b)>1e-10?[-d/b]:[];
+            for(const t of roots){
+              if(t<0||t>stop+1e-8||sign*(2*a*t+b)>=0)continue;
+              const p=point(t);
+              if(p.some((v,j)=>j!==axis&&(v<lo[j]-1e-8||v>hi[j]+1e-8)))continue;
+              hit=c;stop=t;normal=[0,0,0];normal[axis]=sign;
+            }
+          }
+          continue;
+        }
+        const front=Math.max(...verts.map(v=>v[2])),t=(start[2]-front)/(start[2]-end[2]);
         if(t<0||t>stop+1e-8)continue;
         const p=point(t),frontFace=c.poly.faces.find(f=>f.every(i=>Math.abs(verts[i][2]-front)<1e-6)),face=frontFace?frontFace.map(i=>verts[i]):[];
         let sign=0,inside=true;
@@ -748,6 +686,7 @@
         if(inside&&face.length>=3){
           hit=c;
           stop=t;
+          normal=[0,0,1];
         }
       }
       this.trajectory=[];
@@ -761,7 +700,7 @@
         ring=Math.max(1,Math.min(10,10-Math.floor((radius-1e-9)/.125)));
       }
       this.previewHit={
-        id:hit?hit.id:null,ring,duration:1.2*stop
+        id:hit?hit.id:null,ring,duration:1.2*stop,normal
       };
     }
     _shotUpdate(dt){
@@ -770,7 +709,8 @@
       p.time+=dt;
       const i=Math.min(60,Math.floor(p.time/p.hit.duration*60));
       if(!this.shotVisual)this.shotVisual=this._box(p.path[i],[.1,.1,.1],PALETTE[p.color]);
-      this.shotVisual.center=p.path[i].slice();
+      const elapsed=Math.min(p.time,p.hit.duration);
+      this.shotVisual.center=p.start.map((v,axis)=>v+p.velocity[axis]*elapsed-(axis===1?.5*p.gravity*elapsed*elapsed:0));
       if(p.time>=p.hit.duration){
         this.lastImpact=p.path[60].slice();
         const c=this.cells.find(c=>c.id===p.hit.id);
@@ -781,7 +721,7 @@
           }
           else{
             this.score+=p.hit.ring*10;
-            this._cell([this.lastImpact[0],this.lastImpact[1],this.lastImpact[2]+.1],cube(.1,.1,.1),c.component,{
+            this._cell(this.lastImpact.map((v,i)=>v+p.hit.normal[i]*.1),cube(.1,.1,.1),c.component,{
               color:p.color,ring:p.hit.ring,targetIndex:c.targetIndex,attached:true
             });
           }
@@ -966,7 +906,7 @@
       if(this.result||!(dt>0))return;
       dt=Math.min(dt,5);
       this.time+=dt;
-      if(this.level===4)this._waterUpdate(dt);
+      if(this.level===4)root.ChallengeTower.update(this,dt);
       if(this.level===9)this._gearsUpdate();
       if(this.level===10)this._shotUpdate(dt);
       if(this.level===11)this._seesawUpdate(dt);
@@ -975,9 +915,7 @@
     finish(){
       if(this.result)return this.result;
       if(this.phase==='assemble'||this.phase==='aim')return null;
-      if(this.level===4){
-        if(this.water.progress<1)return null;
-      }
+      if(this.level===4)return null;
       if(this.level===12){
         if(this.marble.drops<this.marble.totalDrops)return null;
         this.result=this.score>=this.target?'win':'lose';this.phase='finished';return this.result;
@@ -988,9 +926,9 @@
       return this.result;
     }
     info(){
-      if(this.level===4)return '打通水箱内的贯穿斜板和固定横板。斜板穿过两侧箱壁，内部两条灰色贴边实体不能消除；横板固定不移动。保留管口粉色密封，否则漏水会浪费水量。右上角红线是扑灭剩余火势所需的水量，低于红线即水量不足。';
+      if(this.level===4)return root.ChallengeTower.info(this);
       if(this.phase==='assemble')return '从模型托盘选取至少两个零件，横向滑动可查看全部模型。点击场景中的零件后移动摆放，贴合面出现白光；电脑再次点击确认，触屏拖动后松手确认。最后点击“完成拼接”，再随机配色开始消除。';
-      if(this.phase==='aim')return '调整抛物线落点并投射；剩余 '+this.ammo.length+' 块';
+      if(this.phase==='aim')return '拖住弹弓方块向后拉，调整方向与拉力，松手发射。左右靶各补5块；剩余 '+this.ammo.length+' 发';
       if(this.level===9)return this.gears.moving?'齿轮转动中，请等待停靠':'齿轮停靠，可跨接触面消除';
       if(this.level===11)return '左侧 '+this.seesaw.leftCount+' 块 · 右侧 '+this.seesaw.rightCount+' 块 · 分差不超过12保持平衡；当前消除 ×'+this.seesaw.multiplier;
       if(this.level===12)return '长三角棋盘：只有共边的同色三角块可实体相连。共投放三颗随机颜色弹珠，每次撞击三角块加 100 分；落入得分框额外获得 100、300 或 500 分。三次结束达到 1500 分过关；弹珠下落时仍可消除障碍。';

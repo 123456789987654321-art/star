@@ -466,3 +466,6 @@ canvas#gl {
   .menu-btns { gap: 11px; }
   .mode-btn { padding: 12px 16px; }
 }
+/* Rescue status stays separate from the level-ten slingshot controls. */
+.tower-status{position:fixed;right:18px;top:130px;max-width:220px;padding:14px 16px;border:1px solid #3a4b70;border-radius:16px;background:rgba(10,19,42,.92);color:#d6e6ff;font-size:14px;line-height:1.6;pointer-events:none;z-index:12}
+@media(max-width:600px){.tower-status{top:105px;right:10px;max-width:150px;padding:10px;font-size:12px}}
