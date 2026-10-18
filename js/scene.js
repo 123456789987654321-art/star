@@ -400,6 +400,34 @@
 
     addShake(v) { this.shake = Math.max(this.shake, v); this.shakeT = 1; }
 
+    // Shared hard zoom boundary for every input and game mode. Fit the actual
+    // scene bounds with a small viewport margin, including shifted targets.
+    constrainZoom(tiles, focus = [0,0,0], bottom = .96) {
+      const lo=[Infinity,Infinity,Infinity],hi=[-Infinity,-Infinity,-Infinity];
+      const box=[[-.5,-.5,-.5],[.5,-.5,-.5],[.5,.5,-.5],[-.5,.5,-.5],[-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]];
+      for(const tile of tiles){
+        if(!tile)continue;
+        const basis=tile.basis||[1,0,0,0,1,0,0,0,1],size=tile.size||[1,1,1],center=tile.renderCenter||tile.center;
+        if(!center)continue;
+        for(const vertex of tile.poly?.vertices||box)for(let axis=0;axis<3;axis++){
+          const p=center[axis]+basis[axis]*vertex[0]*size[0]+basis[axis+3]*vertex[1]*size[1]+basis[axis+6]*vertex[2]*size[2];
+          lo[axis]=Math.min(lo[axis],p);hi[axis]=Math.max(hi[axis],p);
+        }
+      }
+      if(!Number.isFinite(lo[0]))return;
+      const points=box.map(p=>p.map((v,i)=>v<0?lo[i]:hi[i]));
+      const radial=v3.norm(v3.sub(this.eye,focus)),tan=Math.tan(this.fov/2),margin=.92;
+      const fits=distance=>{
+        const eye=v3.add(focus,v3.mul(radial,distance)),back=v3.norm(v3.sub(eye,this.target)),right=v3.norm(v3.cross(this.up,back)),up=v3.cross(back,right);
+        return points.every(p=>{const q=v3.sub(p,eye),depth=-v3.dot(q,back),y=v3.dot(q,up);return depth>.31&&Math.abs(v3.dot(q,right))<=depth*tan*this.aspect*margin&&y<=depth*tan*margin&&y>=depth*tan*(1-2*bottom);});
+      };
+      if(fits(this.dist))return;
+      let low=this.dist,high=Math.max(1,this.dist);
+      for(let i=0;i<24&&!fits(high);i++)high*=1.5;
+      for(let i=0;i<24;i++){const mid=(low+high)/2;if(fits(mid))high=mid;else low=mid;}
+      this.dist=high+1e-5;this.eye=v3.add(focus,v3.mul(radial,this.dist));
+    }
+
     beginFrame() {
       const gl = this.gl;
       m4.perspective(this.proj, this.fov, this.aspect, 0.3, 60);

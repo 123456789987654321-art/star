@@ -113,6 +113,9 @@
     }
     render(){
       const sc=this.app.scene,m4=g.MX.m4;
+      const panel=$('challengePanel'),rect=this.hasControls?panel?.getBoundingClientRect?.():null;
+      const bottom=rect&&rect.top>0?Math.min(.96,rect.top/(sc.h/sc.dpr)-.02):.96;
+      sc.constrainZoom?.(this.world.cells.concat(this.world.decorations||[]),this.focus||[0,0,0],bottom);
       sc.beginFrame();
       this.tiles=this.world.cells.filter(c=>c.color>=0).map(c=>this.makeTile(c));
       const decor=(this.world.decorations||[]).map(c=>this.makeTile(c,true));

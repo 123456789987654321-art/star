@@ -45,3 +45,8 @@ User explicitly allows partly cut solid blocks to make outlines continuous. Keep
 - Scenario agent owns world and tests; UI agent owns app/game/index/style and UI tests; root owns geometry, water visual, browser checks and integration.
 
 Implementation complete for all listed screenshot corrections and follow-ups.187 Node tests and extended real Edge checks passed; independent review no blockers. Final commit/upload next.
+
+## Active zoom limit correction
+User requests max zoom across ALL levels fit full main geometry inside viewport with small margin; slider, wheel and pinch share cap; recompute on rotation/resize. Automatically upload verified fixes to star/main per explicit user authorization. Implement shared Scene camera limit based on live geometry bounds and actual camera target; preserve normal/challenge paths. Verify desktop/mobile all12 and normal15 including rotation.
+
+Zoom correction complete:189 tests, all54 desktop/mobile maximum-zoom cases and visual QA passed. Automatic upload authorized.

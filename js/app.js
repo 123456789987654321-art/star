@@ -596,6 +596,7 @@
 
     render() {
       const sc = this.scene;
+      if(this.state!=='menu'&&this.state!=='intro')sc.constrainZoom?.(this.tiles||[]);
       sc.beginFrame();
       // 只绘制彩色方块外壳；消除后的空洞直接露出内部。
       const list = this.renderList;

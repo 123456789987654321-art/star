@@ -80,6 +80,16 @@ const evaluate=async expression=>{const r=await call('Runtime.evaluate',{express
  fs.writeFileSync(path.join(out,'water-through-wall.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
  results.push(await evaluate(`(()=>{const w=App.challenge.world,seal=w.cells.find(c=>c.sideSeal&&c.grid[0]===-1&&c.grid[2]===3),inner=w.cells.find(c=>c.barrier==='slope'&&c.grid[0]===0&&c.grid[2]===3);w.remove([seal.id,inner.id,...w.cells.filter(c=>c.component===1).map(c=>c.id)]);w.update(.1);return {sideWallLeaks:w.water.leaking&&w.water.leaked>0};})()`));
  await delay(100);fs.writeFileSync(path.join(out,'water-side-leak.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+ if(process.env.ZOOM_QA){
+  for(const [width,height] of [[1280,900],[390,844]]){
+   await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<500});
+   for(const mode of ['challenge','normal'])for(let level=1;level<=(mode==='challenge'?12:15);level++){
+    await evaluate(`(()=>{if('${mode}'==='challenge'){qaEnter(${level});App.challenge.intro=0;if(${level}===8){App.challenge.action('add','sphere');App.challenge.action('add','prism');}}else{App.toMenu();App.progressFor('normal').cleared[${level}]=0;App.startSelectedLevel('normal',${level});App.updateAnimations(10);App.introDone=true;App.state='play';App.hideOverlay();}App.setZoom(1);App.scene.rotateOrbit(130,70);document.getElementById('banner').classList.remove('show');})()`);await delay(100);
+    results.push(await evaluate(`(()=>{const cells=App.challenge?[...App.challenge.world.cells,...App.challenge.world.decorations]:App.tiles.filter(Boolean);const points=cells.flatMap(c=>ChallengeProjection.worldVertices(c.poly?c:{...c,poly:{vertices:[[-.5,-.5,-.5],[.5,-.5,-.5],[.5,.5,-.5],[-.5,.5,-.5],[-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]]}})).map(p=>App.scene.project(p));return {zoomMode:'${mode}',zoomLevel:${level},zoomWidth:${width},maxZoomFits:points.every(p=>p&&p[0]>=innerWidth*.035&&p[0]<=innerWidth*.965&&p[1]>=innerHeight*.035&&p[1]<=innerHeight*.965),zoomGL:App.scene.gl.getError()===0};})()`));
+    if(level===1||level===12)fs.writeFileSync(path.join(out,'max-zoom-'+mode+'-'+level+'-'+width+'.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+   }
+  }
+ }
  const failed=results.filter(r=>r.gl||r.normalGL||r.mobileOverflow||(r.clickedLevel&&r.removed<2)||Object.entries(r).some(([k,v])=>typeof v==='boolean'&&k!=='mobileOverflow'&&!v));
  const report={results,errors,failed};fs.writeFileSync(path.join(out,'browser-report.json'),JSON.stringify(report,null,2));
  console.log(JSON.stringify(report,null,2));if(errors.length||failed.length)process.exitCode=1;

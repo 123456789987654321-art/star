@@ -69,3 +69,8 @@ Latest revision: rotor levels now exclusively use physical contacts, including b
 - Return-to-picker HUD, help return outside scrolling content, removed menu test section. Challenge best-clear map persists max-only scores separately from zero-start attempts.
 - Fresh final Node suite187/187 passed; full extended Edge suite errors=[], failed=[] covering real clicks/touch, mobile layout, score persistence, navigation and side leaks. Screenshots visually inspected. Independent review found no critical/important blockers.
 - Publication preparation pending.
+
+## Global maximum zoom correction
+- Shared Scene camera-distance clamp fits transformed model bounds into viewport with4% edges; challenge panels reserve their occupied bottom area. Normal and challenge rendering both use it, covering slider/wheel/pinch, rotations and resize.
+- Fresh full suite189/189 passed. Extended real Edge QA tested all15 normal and12 challenge levels at1280x900 and390x844 with max zoom plus rotation:54 cases all fit, no GL/JS errors. Screenshot confirmed marble bins above bottom panel. Independent review found no important blockers.
+- User explicitly authorized automatic uploads to star/main for verified future changes.
