@@ -24,15 +24,6 @@
         <span class="mb-name">挑战模式</span>
       </button>
     </div>
-    <section class="test-levels" aria-label="独立关卡测试">
-      <h2>关卡测试</h2>
-      <div class="test-level-buttons">
-        <button type="button" data-test-level="1">普通消除</button>
-        <button type="button" data-test-level="2">旋转方板</button>
-        <button type="button" data-test-level="3">视角拼接</button>
-      </div>
-      <p>7×7 独立体验 · 不计最高分</p>
-    </section>
     <div class="best-line">最高分 <b id="menuBest">0</b></div>
     <button class="link-btn" id="btnHowto">玩法说明</button>
     <p class="hint">拖动旋转视角 · 滚轮缩放 · 点击成组方块消除</p>
@@ -45,6 +36,7 @@
     <div class="hud-box hud-left">
       <div class="hud-mode" id="hudMode">普通模式</div>
       <div class="hud-level">第 <b id="hudLevel">1</b> 关</div>
+      <button id="btnLevelSelect" class="level-back-btn" type="button" aria-label="返回当前模式选关">← 返回选关</button>
     </div>
     <div class="hud-box hud-center hidden" id="hudTimerBox">
       <div class="timer-num"><b id="timerNum">60</b><span>s</span></div>
@@ -103,7 +95,7 @@
 <aside id="throwGauge" class="throw-gauge hidden" aria-label="投射力度">
   <div class="throw-gauge-heading"><span>投射力度</span><strong id="throwGaugeValue">0%</strong></div>
   <div id="throwGaugeTrack" class="throw-gauge-track" role="progressbar" aria-label="投射力度百分比" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="throwGaugeFill"></i></div>
-  <p>按住蓄力 · 松开发射</p><span id="challengeAmmo"></span>
+  <p>按住：0 → 100 → 0 循环<br>升降各 4 秒 · 松开发射</p><span id="challengeAmmo"></span>
 </aside>
 <div id="seesawCounts" class="seesaw-counts hidden" aria-live="polite"><span id="seesawLeftCount"></span><strong id="seesawMultiplier"></strong><span id="seesawRightCount"></span></div>
 <section id="challengePanel" class="challenge-panel hidden" aria-label="挑战关卡操作">
@@ -113,7 +105,7 @@
 <div id="toasts"></div>
 <div id="tip"></div>
 <div id="banner"></div>
-<div id="overlay" class="hidden"><div class="ov-card" id="ovCard"></div></div>
+<div id="overlay" class="hidden"><div class="ov-shell"><button id="btnDialogBack" class="dialog-back" type="button" data-act="dialogBack" hidden>返回</button><div class="ov-card" id="ovCard"></div></div></div>
 <div id="bootErr" class="hidden"></div>
 
 <script src="js/mathx.js"></script>

@@ -16,7 +16,7 @@ const evaluate=async expression=>{const r=await call('Runtime.evaluate',{express
  await call('Runtime.enable');await call('Page.enable');await call('Page.navigate',{url:'http://127.0.0.1:'+server.address().port+'/'});await delay(1200);
  const results=[];
  await evaluate(`App.startSelectedLevel('challenge',2);window.qaEntryTime=App.challenge.world.time;`);await delay(200);
- results.push(await evaluate(`({entryPaused:App.state==='paused'&&App.challenge.world.time===qaEntryTime,entryAcknowledgeOnly:document.querySelectorAll('#ovCard button').length===1&&document.querySelector('#ovCard button').textContent==='我知道了'})`));
+ results.push(await evaluate(`({entryPaused:App.state==='paused'&&App.challenge.world.time===qaEntryTime,entryAcknowledgePresent:[...document.querySelectorAll('#ovCard button')].some(b=>b.textContent==='我知道了')})`));
  fs.writeFileSync(path.join(out,'entry-instructions.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
  await evaluate(`window.qaEnter=level=>{App.startSelectedLevel('challenge',level);if(App.state!=='paused'||!document.getElementById('ovCard').textContent.includes('我知道了'))throw Error('Missing entry instructions '+level);document.querySelector('#overlay [data-act="resume"]').click();if(App.state!=='play')throw Error('Entry acknowledgement failed');};`);
  for(let level=1;level<=12;level++){
@@ -45,7 +45,7 @@ const evaluate=async expression=>{const r=await call('Runtime.evaluate',{express
  await evaluate(`qaEnter(4);App.challenge.intro=0;App.challenge.world.remove(App.challenge.world.cells.filter(c=>!c.seal).map(c=>c.id));App.challenge.world.update(.6);App.challenge.syncHud();`);await delay(80);
  results.push(await evaluate(`({waterGaugeVisible:!document.getElementById('waterGauge').classList.contains('hidden'),waterDepletes:App.challenge.world.water.amount<100,waterJetVisible:App.challenge.world.waterVisuals.jet.alpha>0})`));
  fs.writeFileSync(path.join(out,'water-flow.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
- results.push(await evaluate(`(()=>{qaEnter(12);const g=App.challenge;g.intro=0;g.world.cells.forEach(c=>c.color=-1);for(let drop=0;drop<3;drop++){g.controls();document.querySelector('[data-challenge="release"]').click();for(let i=0;i<2000&&g.world.marble.released;i++)g.world.update(.02);}g.checkResult();App.restart();return {restartZero:App.score===0&&App.challenge.world.score===0,marbleThreeDrops:g.world.marble.drops===3,marbleBelowTargetLoses:g.world.result==='lose'};})()`));
+ results.push(await evaluate(`(()=>{qaEnter(12);const g=App.challenge;g.intro=0;g.world.cells.forEach(c=>c.color=-1);for(let drop=0;drop<3;drop++){g.controls();document.querySelector('[data-challenge="release"]').click();for(let i=0;i<2000&&g.world.marble.released;i++)g.world.update(.02);}g.checkResult();App.restart();return {restartZero:App.score===0&&App.challenge.world.score===0,marbleThreeDrops:g.world.marble.drops===3,marbleCenterScores:g.world.score===1500,marbleWon:g.world.result==='win'};})()`));
  await evaluate(`App.pause();window.qaPausedTime=App.challenge.world.time`);await delay(250);results.push(await evaluate(`({pauseFrozen:qaPausedTime===App.challenge.world.time})`));await evaluate('App.resume()');
  results.push(await evaluate(`(()=>{document.getElementById('btnMechanicInfo').click();const reopened=App.state==='paused'&&document.getElementById('ovCard').textContent.includes('我知道了');document.querySelector('#overlay [data-act="resume"]').click();return {infoReopens:reopened,infoDismissed:App.state==='play'&&document.getElementById('overlay').classList.contains('hidden')};})()`));
  await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await evaluate(`qaEnter(12);App.challenge.intro=0;document.getElementById('banner').classList.remove('show');`);await delay(350);
@@ -60,6 +60,26 @@ const evaluate=async expression=>{const r=await call('Runtime.evaluate',{express
  fs.writeFileSync(path.join(out,'mobile.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
  results.push(await evaluate(`({mobileOverflow:document.documentElement.scrollWidth>innerWidth,paused:(App.pause(),App.state)})`));
  await evaluate(`App.toMenu();App.startSelectedLevel('normal',1)`);await delay(100);results.push(await evaluate(`({normalUnaffected:!App.challenge&&App.mode==='normal'&&document.getElementById('challengePanel').classList.contains('hidden'),normalGL:App.scene.gl.getError()})`));
+ await evaluate(`document.getElementById('btnLevelSelect').click();`);
+ results.push(await evaluate(`({normalReturnPicker:App.selectMode==='normal'&&!!document.querySelector('[data-act="selectLevel"]')})`));
+ await evaluate(`App.toMenu();App.showHelp(true);document.getElementById('ovCard').scrollTop=10000;`);await delay(400);
+ results.push(await evaluate(`(()=>{const b=document.getElementById('btnDialogBack'),r=b.getBoundingClientRect();return {helpBackVisible:!b.hidden&&r.top>=0&&r.bottom<innerHeight,removedTestMenu:!document.querySelector('.test-levels')};})()`));
+ fs.writeFileSync(path.join(out,'mobile-help.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+ await evaluate(`document.getElementById('btnDialogBack').click();`);
+ results.push(await evaluate(`({helpBackCloses:App.state==='menu'&&document.getElementById('overlay').classList.contains('hidden')&&document.getElementById('btnDialogBack').hidden})`));
+ results.push(await evaluate(`(()=>{for(const score of [900,700,1100]){qaEnter(1);const g=App.challenge;g.world.score=score;g.world.result='win';g.checkResult();}document.getElementById('btnLevelSelect').click();const saved=JSON.parse(localStorage.getItem('popstar3d.progress.challenge.v2'));return {challengeReturnPicker:App.selectMode==='challenge',bestClearMax:saved.best[1]===1100,bestDisplayed:document.querySelector('[data-level="1"] .level-best').textContent==='历史最高分：1100'};})()`));
+ await delay(400);fs.writeFileSync(path.join(out,'mobile-picker.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+ for(const level of [11,12]){
+  await evaluate(`qaEnter(${level});App.challenge.intro=0;document.getElementById('banner').classList.remove('show');`);await delay(200);
+  results.push(await evaluate(`(()=>{const g=App.challenge,points=[...g.world.cells,...g.world.decorations].flatMap(c=>ChallengeProjection.worldVertices(c)).map(p=>App.scene.project(p)).filter(Boolean),xs=points.map(p=>p[0]),ys=points.map(p=>p[1]);const labels=[...document.querySelectorAll('#challengeLabels span')].map(e=>e.getBoundingClientRect()),panel=document.getElementById('challengePanel').getBoundingClientRect();return {cameraLevel:${level},modelCentered:Math.abs((Math.min(...xs)+Math.max(...xs))/2-innerWidth/2)<innerWidth*.04,modelVisible:Math.min(...xs)>0&&Math.max(...xs)<innerWidth&&Math.min(...ys)>0&&Math.max(...ys)<innerHeight,binLabelsClear:labels.every(r=>r.bottom<panel.top||r.top>panel.bottom),numericBins:g.level!==12||[...document.querySelectorAll('#challengeLabels span')].map(e=>e.textContent).join(',')==='100,300,500,300,100'};})()`));
+  fs.writeFileSync(path.join(out,'mobile-level-'+level+'.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+ }
+ await call('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+ await evaluate(`qaEnter(4);App.challenge.intro=0;App.scene.yaw=-.65;App.scene.pitch=.35;document.getElementById('banner').classList.remove('show');`);await delay(200);
+ results.push(await evaluate(`({visibleWater:App.challenge.world.waterVisuals.waterVolume.alpha>.6,waterRipples:App.challenge.world.waterVisuals.ripples.length>=3})`));
+ fs.writeFileSync(path.join(out,'water-through-wall.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+ results.push(await evaluate(`(()=>{const w=App.challenge.world,seal=w.cells.find(c=>c.sideSeal&&c.grid[0]===-1&&c.grid[2]===3),inner=w.cells.find(c=>c.barrier==='slope'&&c.grid[0]===0&&c.grid[2]===3);w.remove([seal.id,inner.id,...w.cells.filter(c=>c.component===1).map(c=>c.id)]);w.update(.1);return {sideWallLeaks:w.water.leaking&&w.water.leaked>0};})()`));
+ await delay(100);fs.writeFileSync(path.join(out,'water-side-leak.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
  const failed=results.filter(r=>r.gl||r.normalGL||r.mobileOverflow||(r.clickedLevel&&r.removed<2)||Object.entries(r).some(([k,v])=>typeof v==='boolean'&&k!=='mobileOverflow'&&!v));
  const report={results,errors,failed};fs.writeFileSync(path.join(out,'browser-report.json'),JSON.stringify(report,null,2));
  console.log(JSON.stringify(report,null,2));if(errors.length||failed.length)process.exitCode=1;

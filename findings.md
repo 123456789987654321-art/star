@@ -17,3 +17,5 @@
 - Tile colors are 0..5. Reserve 6 for grey wildcard without adding it to random generation.
 - Scene.pick accepts arbitrary boxes and nearest visible IDs, suitable for gates and tunnel walls if incorporated into the pick list.
 - Existing hints/settlement must honor coatings and internal wildcard reserves.
+
+Current water issue: alpha .10 was too faint against canvas background; .66 cyan volume plus brighter surface/ripples is readable in actual screenshot. Added through-wall slope seals and leakage route. Smooth shape clipping preserves closed convex cells, internal full blocks and hole voids; ring inner contact flats widened to prevent crossed-ring penetration. Unit regression verifies rings disjoint.

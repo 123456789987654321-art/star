@@ -41,8 +41,8 @@
     frame(dt){
       if(!this.enabled()){if(this.charging)this.cancel();return;}
       if(!this.charging)return;
-      this.elapsed=Math.min(1.5,this.elapsed+Math.max(0,Number(dt)||0));
-      this.power=this.elapsed/1.5;this.preview();
+      this.elapsed=(this.elapsed+Math.max(0,Number(dt)||0))%8;
+      this.power=1-Math.abs(this.elapsed/4-1);this.preview();
     }
     cancel(){
       const consumed=this.charging;this.charging=false;this.pointerId=null;this.elapsed=0;this.power=0;this.world.throwPower=0;

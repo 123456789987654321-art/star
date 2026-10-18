@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 require('../js/challenge-geometry.js');
 const World=require('../js/challenge-world.js');
 
-test('both targets use nonoverlapping solid cubes including the bullseye',()=>{
+test('targets retain interior cubes and clip boundary blocks to a smooth nonoverlapping disk',()=>{
   const w=new World(10,()=>.2);
   for(const target of [0,1]){
     const cells=w.cells.filter(c=>c.targetIndex===target);
@@ -11,17 +11,26 @@ test('both targets use nonoverlapping solid cubes including the bullseye',()=>{
     assert.ok(cells.some(c=>Math.hypot(c.center[0]-w.targetCenters[target][0],c.center[1])<1e-8));
     for(const c of cells){
       const spans=[0,1,2].map(axis=>Math.max(...c.poly.vertices.map(v=>v[axis]))-Math.min(...c.poly.vertices.map(v=>v[axis])));
-      assert.equal(new Set(c.poly.vertices.map(v=>v.join(','))).size,8);
-      assert.ok(c.poly.faces.every(f=>f.length===4));
-      assert.ok(spans.every(s=>Math.abs(s-spans[0])<1e-8),'each block has equal width, height, and depth');
-      assert.ok(Math.abs(c.volume-spans[0]**3)<1e-8);
+      assert.ok(c.volume>0&&c.volume<=.18**3+1e-8);
+      assert.ok(w._vertices(c).every(v=>Math.hypot(v[0]-w.targetCenters[target][0],v[1])<=1.25+1e-8));
+      if(Math.hypot(c.center[0]-w.targetCenters[target][0],c.center[1])<1){
+        assert.equal(c.poly.vertices.length,8);
+        assert.ok(spans.every(s=>Math.abs(s-.18)<1e-8));
+      }
       for(const other of cells.filter(other=>other.id>c.id)){
-        assert.ok(c.center.some((v,axis)=>Math.abs(v-other.center[axis])>=spans[axis]-1e-8),'blocks do not overlap');
+        assert.ok(c.grid.some((v,axis)=>v!==other.grid[axis]),'blocks occupy distinct grid cells');
       }
     }
   }
   assert.equal(w.ammo.length,w.cells.filter(c=>c.hole).length);
   assert.ok([0,1].every(target=>w.cells.some(c=>c.targetIndex===target&&c.hole)));
+  for(let i=0;i<96;i++){
+    const angle=(i+.5)*Math.PI*2/96;
+    w.action('aim',{x:-1.6+1.248*Math.cos(angle),y:1.248*Math.sin(angle)});
+    assert.notEqual(w.previewHit.id,null,'perimeter has no staircase gaps');
+    w.action('aim',{x:-1.6+1.251*Math.cos(angle),y:1.251*Math.sin(angle)});
+    assert.equal(w.previewHit.id,null,'outside disk is not pickable');
+  }
 });
 
 test('ten target rings score the impact point and the projectile edge breaks ties upward',()=>{

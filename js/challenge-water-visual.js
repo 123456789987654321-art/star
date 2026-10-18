@@ -44,7 +44,7 @@
     const w=world.water,layout=w.layout||{},min=layout.tankMin||[-3.6,0,-1.4],max=layout.tankMax||[-.8,5.6,1.4];
     const pipePoints=layout.pipePoints||[[-2.2,0,0],[-2.2,-1,0],[1,-2.4,0],[2,-2.4,0]],radius=layout.pipeRadius||.4;
     const fire=layout.fireCenter||[3.4,-4.25,0],path=roundedPath(pipePoints),base=box();
-    const visual={flames:[],embers:[],elapsed:0,layout:{min,max,fire},decorations:[]};
+    const visual={flames:[],embers:[],ripples:[],elapsed:0,layout:{min,max,fire},decorations:[]};
     const addDeco=(poly,center,rgb,alpha=1,size=[1,1,1])=>{
       const d={poly,center:center.slice(),rgb,alpha,size:size.slice(),basis:I.slice()};world.decorations.push(d);visual.decorations.push(d);return d;
     };
@@ -86,8 +86,14 @@
       const rim=Array.from({length:33},(_,i)=>add(p,add(scale(u,radius*Math.cos(TAU*i/32)),[0,0,radius*Math.sin(TAU*i/32)])));
       addDeco(tube(rim,.025,8),[0,0,0],[.72,.97,1],.95);
     }
-    visual.waterVolume=rect(middle,[width-.08,height-.1,depth-.08],[.12,.67,1],.10);
-    visual.waterSurface=rect([middle[0],max[1]-.15,middle[2]],[width-.08,.018,depth-.08],[.30,.85,1],.35);
+    visual.waterVolume=rect(middle,[width-.08,height-.1,depth-.08],[.10,.72,1],.66);
+    visual.waterSurface=rect([middle[0],max[1]-.15,middle[2]],[width-.08,.025,depth-.08],[.26,.86,1],.68);
+    for(let i=0;i<5;i++){
+      const z=min[2]+.35+i*(depth-.7)/4;
+      const points=Array.from({length:25},(_,j)=>[min[0]+.16+j*(width-.32)/24,0,z+.055*Math.sin(j*.5+i)]);
+      const ripple=addDeco(tube(points,.012,6),[0,0,0],[.68,.96,1],.8);
+      ripple.phase=i;visual.ripples.push(ripple);
+    }
     const outlet=pipePoints.at(-1),arc=Array.from({length:25},(_,i)=>{
       const t=i/24;return [outlet[0]+(fire[0]-outlet[0])*t,outlet[1]-.10*t-(outlet[1]-fire[1]-.10)*t*t,fire[2]*t+outlet[2]*(1-t)];
     });
@@ -119,8 +125,9 @@
     v.elapsed+=Math.max(0,Number(dt)||0);const t=v.elapsed,level=clamp(w.amount/Math.max(1,w.capacity||100)),heat=1-clamp(w.progress||0),{min,max,fire}=v.layout;
     const waterHeight=Math.max(.008,(max[1]-min[1]-.18)*level);
     v.waterVolume.size[1]=waterHeight;v.waterVolume.center[1]=min[1]+waterHeight/2;
-    v.waterSurface.center[1]=min[1]+waterHeight;v.waterSurface.alpha=level>0?.35+.025*Math.sin(t*1.8):0;
-    v.waterVolume.alpha=level>0?.10:0;
+    v.waterSurface.center[1]=min[1]+waterHeight;v.waterSurface.alpha=level>0?.68+.025*Math.sin(t*1.8):0;
+    v.waterVolume.alpha=level>0?.66:0;
+    for(const ripple of v.ripples){ripple.center[1]=min[1]+waterHeight+.025;ripple.center[2]=.035*Math.sin(t*1.5+ripple.phase);ripple.alpha=level>0?.66+.12*Math.sin(t*2+ripple.phase):0;}
     const flowing=Boolean(w.flowing&&level>0);v.pipeWater.alpha=flowing?.24:0;
     v.jet.alpha=flowing?.78:0;v.jetHighlight.alpha=flowing?.70:0;
     v.leak.alpha=w.leaking&&level>0?.7:0;v.leak.center=(w.leakPosition||[-2.2,1.2,0]).slice();

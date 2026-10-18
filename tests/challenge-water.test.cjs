@@ -14,13 +14,48 @@ test('water barriers occupy the tank and immutable fillers cannot be removed',()
   assert.ok(w.water.layout.pipePoints.at(-1)[0]<w.water.layout.fireCenter[0]-1);
   const fillers=w.cells.filter(c=>c.immutable);
   assert.ok(fillers.length>0);
-  for(const c of w.cells)for(let axis=0;axis<3;axis++){
+  for(const c of w.cells.filter(c=>!c.exterior))for(let axis=0;axis<3;axis++){
     assert.ok(c.center[axis]-.2>=w.water.layout.tankMin[axis]-1e-8);
     assert.ok(c.center[axis]+.2<=w.water.layout.tankMax[axis]+1e-8);
   }
   for(const c of fillers)assert.equal(w.canRemoveCell(c.id),false);
   assert.deepEqual(w.remove(fillers.map(c=>c.id)),[]);
   assert.ok(fillers.every(c=>c.color===6));
+});
+
+test('sloped barrier passes through opposite walls with two internal fixed edge fillers',()=>{
+  const w=world(),slope=w.cells.filter(c=>c.barrier==='slope');
+  assert.ok(slope.some(c=>c.center[0]-.2<w.water.layout.tankMin[0]));
+  assert.ok(slope.some(c=>c.center[0]+.2>w.water.layout.tankMax[0]));
+  const fixed=slope.filter(c=>c.immutable);
+  assert.deepEqual([...new Set(fixed.map(c=>c.grid[2]))].sort(),[0,6]);
+  const top=slope.flatMap(c=>w._vertices(c).filter((v,i)=>[2,3,6,7].includes(i)));
+  const plane=top[0][1]-top[0][0]/3;
+  assert.ok(top.every(v=>Math.abs(v[1]-v[0]/3-plane)<1e-8),'every block top lies in one sloping plane');
+  for(const x of [0,6]){
+    const join=slope.find(c=>c.grid[0]===x&&c.grid[2]===3);
+    assert.equal(w.canRemoveCell(join.id),true);
+    const outer=slope.find(c=>c.grid[0]===(x===0?-1:7)&&c.grid[2]===3&&c.sideSeal&&c.seal);
+    assert.ok(outer);
+    assert.ok(Math.abs((outer.center[1]-join.center[1])-(outer.center[0]-join.center[0])/3)<1e-8,'crossing follows one continuous slope');
+  }
+});
+
+test('breaking either wall penetration leaks only after water reaches it',()=>{
+  for(const x of [0,6]){
+    const w=world(),seal=w.cells.find(c=>c.sideSeal&&c.grid[0]===(x===0?-1:7)&&c.grid[2]===3);
+    assert.ok(seal,'each crossed wall needs a breakable seal');
+    w.remove([seal.id]);w.update(.1);
+    assert.equal(w.water.leaking,false);
+    w.remove(w.cells.filter(c=>c.component===1).map(c=>c.id));w.update(.1);
+    assert.equal(w.water.leaking,false,'remaining interior solid still seals the wall');
+    const inner=w.cells.find(c=>c.barrier==='slope'&&c.grid[0]===x&&c.grid[2]===3);
+    w.remove([inner.id]);w.update(.1);
+    assert.equal(w.water.leaking,true);
+    assert.deepEqual(w.water.leakPosition,seal.center);
+    assert.ok(w.water.leaked>0);
+    assert.ok(Math.abs(w.water.amount+w.water.used+w.water.leaked-100)<1e-8);
+  }
 });
 
 test('intact barriers conserve water indefinitely and both barriers need an open route',()=>{
@@ -42,7 +77,7 @@ test('intact barriers conserve water indefinitely and both barriers need an open
 });
 
 test('isolated broken seals do not leak until a connected water route reaches them',()=>{
-  const w=world(),seal=w.cells.find(c=>c.seal);
+  const w=world(),seal=w.cells.find(c=>c.seal&&!c.sideSeal);
   w.remove([seal.id]);advance(w,2);
   assert.equal(w.water.leaking,false);
   assert.equal(w.water.amount,100);

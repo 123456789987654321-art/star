@@ -10,7 +10,7 @@
   g.ChallengeThumbnail=function(shape){
     if(cache.has(shape))return cache.get(shape);
     const faces=new Map();
-    for(const cell of g.ChallengeGeometry.make(shape,{size:1,resolution:7}))for(const indices of cell.poly.faces){
+    for(const cell of g.ChallengeGeometry.make(shape,{size:1,resolution:7,smooth:true}))for(const indices of cell.poly.faces){
       const points=indices.map(i=>cell.poly.vertices[i].map((v,k)=>v+cell.center[k]));
       const key=points.map(p=>p.map(v=>v.toFixed(6)).join(',')).sort().join('|');
       if(faces.has(key)){faces.get(key).shared=true;continue;}

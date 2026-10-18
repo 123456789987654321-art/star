@@ -8,6 +8,53 @@
   const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
   const TAU=Math.PI*2;
 
+  // Clip a closed convex solid, retaining actual volume and a shared cap.
+  function clip(poly,n,d){
+    if(!poly)return null;
+    const distances=poly.vertices.map(p=>dot(n,p)-d);
+    if(distances.every(v=>v<=1e-9))return poly;
+    if(distances.every(v=>v>=-1e-9))return null;
+    const polygons=[],cap=[];
+    for(const face of poly.faces){
+      const points=[];
+      for(let j=0;j<face.length;j++){
+        const i=face[j],k=face[(j+1)%face.length],a=poly.vertices[i],b=poly.vertices[k],da=distances[i],db=distances[k];
+        if(da<=1e-9)points.push(a);
+        if((da< -1e-9&&db>1e-9)||(da>1e-9&&db< -1e-9)){
+          const p=add(a,mul(sub(b,a),da/(da-db)));points.push(p);cap.push(p);
+        }else if(Math.abs(da)<=1e-9)cap.push(a);
+      }
+      if(points.length>=3)polygons.push(points);
+    }
+    const unique=cap.filter((p,i)=>!cap.slice(0,i).some(q=>Math.hypot(...sub(p,q))<1e-8));
+    if(unique.length>=3){
+      const mid=mul(unique.reduce(add,[0,0,0]),1/unique.length),u=sub(unique[0],mid),v=cross(n,u);
+      unique.sort((a,b)=>Math.atan2(dot(sub(a,mid),v),dot(sub(a,mid),u))-Math.atan2(dot(sub(b,mid),v),dot(sub(b,mid),u)));
+      polygons.push(unique);
+    }
+    const vertices=[],faces=[];
+    for(let points of polygons){
+      points=points.filter((p,i)=>!points.slice(0,i).some(q=>Math.hypot(...sub(p,q))<1e-8));
+      // Remove collinear vertices so every renderer triangle has a normal.
+      let changed=true;
+      while(changed&&points.length>2){changed=false;for(let i=0;i<points.length;i++)if(Math.hypot(...cross(sub(points[i],points[(i+points.length-1)%points.length]),sub(points[(i+1)%points.length],points[i])))<1e-10){points.splice(i,1);changed=true;break;}}
+      if(points.length<3)continue;
+      faces.push(points.map(p=>{let i=vertices.findIndex(q=>Math.hypot(...sub(p,q))<1e-8);if(i<0){i=vertices.length;vertices.push(p);}return i;}));
+    }
+    return faces.length>=4?{vertices,faces}:null;
+  }
+
+  function planesFor(name,s){
+    const planes=[];
+    if(name==='prism')planes.push([[1,.5,0],s/2],[[-1,.5,0],s/2]);
+    if(name==='frustum')for(const axis of [0,2])for(const sign of [-1,1]){const n=[0,.26,0];n[axis]=sign;planes.push([n,.74*s]);}
+    if(name==='tetrahedron')planes.push([[0,.35,-1],.35*s],[[1,.5/1.7,1/1.7],s*.5/1.7],[[-1,.5/1.7,1/1.7],s*.5/1.7]);
+    if(name==='cylinder'||name==='torus')for(let i=0;i<32;i++){const a=TAU*i/32;planes.push([[Math.cos(a),0,Math.sin(a)],s]);}
+    if(name==='sphere')for(let j=0;j<=12;j++)for(let i=0;i<(j===0||j===12?1:24);i++){const p=Math.PI*j/12,a=TAU*i/24;planes.push([[Math.sin(p)*Math.cos(a),Math.cos(p),Math.sin(p)*Math.sin(a)],s]);}
+    if(name==='torus')planes.push([[0,1,0],s*.125],[[0,-1,0],s*.125]);
+    return planes;
+  }
+
   function hull(vertices) {
         const hull=new Map();
         for(let i=0;i<vertices.length;i++)for(let j=i+1;j<vertices.length;j++)for(let k=j+1;k<vertices.length;k++){
@@ -57,12 +104,33 @@
         throw new Error('Unknown challenge geometry: '+name);
       };
       const occupied=new Map();
+      // Broad axial inner flats give the perpendicular ring a real contact
+      // patch across its thickness, instead of intersecting curved corners.
+      const planes=options.smooth?planesFor(name,s):[],hole=ring&&options.smooth?Array.from({length:32},(_,i)=>[[Math.cos(TAU*i/32),0,Math.sin(TAU*i/32)],s*.75]).filter(([n])=>Math.abs(n[0])<.92||Math.abs(n[2])<1e-8):[];
       for(let x=0;x<count;x++)for(let z=0;z<count;z++){
         for(let y=0;y<count;y++){
           const center=[x,y,z].map(i=>-extent+(i+.5)*step);
-          if(inside(...center)){
-            const c={center,poly,track:'',order:0};
-            cells.push(c);occupied.set([x,y,z].join(','),{c,grid:[x,y,z]});
+          if(options.smooth){
+            let solid=poly;
+            for(const [normal,d] of planes){solid=clip(solid,normal,d-dot(normal,center));if(!solid)break;}
+            if(!solid)continue;
+            let pieces=[solid];
+            if(hole.length){
+              pieces=[];let remainder=solid;
+              for(const [normal,d] of hole){
+                if(!remainder)break;
+                const outside=clip(remainder,mul(normal,-1),dot(normal,center)-d);
+                if(outside)pieces.push(outside);
+                remainder=clip(remainder,normal,d-dot(normal,center));
+              }
+            }
+            for(let part=0;part<pieces.length;part++){
+              const shape=pieces[part],shift=mul(shape.vertices.reduce(add,[0,0,0]),1/shape.vertices.length);
+              const c={center:add(center,shift),poly:{vertices:shape.vertices.map(p=>sub(p,shift)),faces:shape.faces},clipped:shape!==poly,gridCenter:center.slice(),gridStep:step,part,track:'',order:0};
+              cells.push(c);occupied.set([x,y,z].join(',')+(part?':'+part:''),{c,grid:[x,y,z]});
+            }
+          }else if(inside(...center)){
+            const c={center,poly,track:'',order:0};cells.push(c);occupied.set([x,y,z].join(','),{c,grid:[x,y,z]});
           }
         }
       }
@@ -80,7 +148,7 @@
         const fixedAxis=[0,1,2].find(axis=>axis!==owner.axis&&axis!==fallAxis);
         // Include the actual plane as well as depth: curved stair steps at the
         // same depth can have different surface coordinates.
-        const key='face'+(owner.sign>0?'+':'-')+'xyz'[owner.axis]+':depth'+owner.depth+':plane'+grid[owner.axis]+':column'+grid[fixedAxis];
+        const key='face'+(owner.sign>0?'+':'-')+'xyz'[owner.axis]+':depth'+owner.depth+':plane'+grid[owner.axis]+':column'+grid[fixedAxis]+(c.part?':part'+c.part:'');
         if(!lanes.has(key))lanes.set(key,[]);
         lanes.get(key).push({c,position:grid[fallAxis],direction:fallAxis===2?-1:1});
       }
@@ -111,5 +179,5 @@
     }
     return cells;
   }
-  g.ChallengeGeometry={make,hull};
+  g.ChallengeGeometry={make,hull,clip};
 })(typeof window!=='undefined'?window:globalThis);

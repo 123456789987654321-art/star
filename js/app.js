@@ -992,6 +992,7 @@
       let p=null;
       try { p=JSON.parse(window.localStorage.getItem('popstar3d.progress.'+mode+(mode==='challenge'?'.v2':''))); } catch(e) {}
       if(!p||!Number.isSafeInteger(p.next)||p.next<1||!Number.isFinite(p.score)||p.score<0||!p.cleared||typeof p.cleared!=='object')p={next:1,score:0,cleared:{}};
+      if(mode==='challenge')p.best=Object.fromEntries(Object.entries(p.best&&typeof p.best==='object'?p.best:{}).filter(([level,score])=>Number.isInteger(Number(level))&&Number(level)>=1&&Number(level)<=12&&Number.isFinite(score)&&score>=0));
       return this.progressCache[mode]=p;
     },
     recordClear() {
@@ -1011,10 +1012,11 @@
         const unlocked=mode==='challenge'||cleared||level===p.next;
         const profile=window.LevelProfile(level,mode);
         const label=cleared?'已通关':unlocked?'可挑战':'🔒';
-        buttons+=`<button class="level-choice ${unlocked?'passed':'locked'}" ${unlocked?`data-act="selectLevel" data-level="${level}"`:'disabled'} aria-label="第 ${level} 关，${profile.title}，${unlocked?label:'未解锁'}">${level}<small>${mode==='challenge'?'不限时':profile.size+'×'+profile.size}</small><small>${profile.title}</small><small>${label}</small></button>`;
+        const best=Number.isFinite(p.best?.[level])&&p.best[level]>=0?p.best[level]:0;
+        buttons+=`<button class="level-choice ${unlocked?'passed':'locked'}" ${unlocked?`data-act="selectLevel" data-level="${level}"`:'disabled'} aria-label="第 ${level} 关，${profile.title}，${unlocked?label:'未解锁'}">${level}<small>${mode==='challenge'?'不限时':profile.size+'×'+profile.size}</small><small>${profile.title}</small><small>${label}</small>${mode==='challenge'?`<small class="level-best">历史最高分：${best}</small>`:''}</button>`;
       }
       const continuation=p.next>count?'<p class="ov-sub">可选择关卡重玩</p>':`<button class="ov-btn" data-act="continueLevels">${p.next===1?'开始闯关':'继续闯关'} · 第 ${p.next} 关</button>`;
-      this.overlay(`<h2 class="ov-title">${mode==='normal'?'普通模式':'挑战模式'} · 选关</h2><p class="ov-sub">${mode==='challenge'?'全部 12 关已开放 · 可任选关卡测试':'彩色关卡可进入 · 通关后解锁下一关'}</p><div class="level-grid">${buttons}</div><div class="ov-actions">${continuation}<button class="ov-btn plain" data-act="helpClose">返回菜单</button></div>`);
+      this.overlay(`<h2 class="ov-title">${mode==='normal'?'普通模式':'挑战模式'} · 选关</h2><p class="ov-sub">${mode==='challenge'?'全部 12 关已开放 · 可任选关卡挑战':'彩色关卡可进入 · 通关后解锁下一关'}</p><div class="level-grid">${buttons}</div><div class="ov-actions">${continuation}<button class="ov-btn plain" data-act="helpClose">返回菜单</button></div>`);
     },
     startSelectedLevel(mode,level,continuing=false) {
       const p=this.progressFor(mode);
@@ -1084,6 +1086,12 @@
     },
 
     restart() { this.score=this.entryScore||0;this.newRecord=false;this.startLevel(true); },
+
+    returnToLevelSelect() {
+      const mode=this.mode==='challenge'?'challenge':'normal';
+      this.toMenu();
+      this.showLevelSelect(mode);
+    },
 
     toMenu() {
       if(this.challenge){this.challenge.dispose();this.challenge=null;}
@@ -1165,6 +1173,7 @@
       document.getElementById('btnHelp').addEventListener('click', () => this.showHelp());
       document.getElementById('btnHint').addEventListener('click', () => this.showHint());
       document.getElementById('btnMechanicInfo').addEventListener('click', () => this.showMechanicIntro());
+      document.getElementById('btnLevelSelect').addEventListener('click', () => this.returnToLevelSelect());
       document.getElementById('btnMenu').addEventListener('click', () => this.toMenu());
       const sb = document.getElementById('btnSound');
       sb.addEventListener('click', () => {
@@ -1179,7 +1188,7 @@
         const act = button ? button.dataset.act : null;
         if (!act) return;
         if(act==='selectLevel')this.startSelectedLevel(this.selectMode,Number(button.dataset.level));
-        else if(act==='challengeSelect'){this.toMenu();this.showLevelSelect('challenge');}
+        else if(act==='challengeSelect'||act==='levelSelect')this.returnToLevelSelect();
         else if(act==='continueLevels')this.startSelectedLevel(this.selectMode,this.progressFor(this.selectMode).next,true);
         else if (act === 'next') {
           this.level++;
@@ -1189,16 +1198,29 @@
         else if (act === 'resume') this.resume();
         else if (act === 'challengeFinish' && this.challenge) { this.resume();this.challenge.world.finish();this.challenge.checkResult(); }
         else if (act === 'helpClose') this.hideOverlay();
+        else if (act === 'dialogBack') this.backFromHelp();
         else if (act === 'restart') this.restart();
       });
     },
 
     overlay(html) {
-      document.getElementById('ovCard').innerHTML = html;
+      document.getElementById('btnDialogBack').hidden=!html.includes('class="ov-help"');
+      const needsLevelReturn=this.state!=='menu'&&!/data-act="(?:levelSelect|challengeSelect)"/.test(html);
+      document.getElementById('ovCard').innerHTML = html + (needsLevelReturn ? '<div class="ov-actions"><button class="ov-btn plain" data-act="levelSelect">返回选关</button></div>' : '');
       document.getElementById('overlay').classList.remove('hidden');
     },
 
-    hideOverlay() { document.getElementById('overlay').classList.add('hidden'); },
+    hideOverlay() { document.getElementById('overlay').classList.add('hidden'); document.getElementById('btnDialogBack').hidden=true; },
+
+    rememberHelpReturn() {
+      this.helpReturn={state:this.state,html:this.state==='paused'?document.getElementById('ovCard').innerHTML:null};
+    },
+    backFromHelp() {
+      const previous=this.helpReturn;this.helpReturn=null;
+      if(previous?.state==='paused'&&previous.html){this.state='paused';this.overlay(previous.html);}
+      else if(previous?.state==='menu'){this.state='menu';this.hideOverlay();}
+      else this.resume();
+    },
 
     hasMechanicIntro() {
       return this.mode==='normal'&&(this.level===2||this.level===3);
@@ -1206,6 +1228,7 @@
     showMechanicIntro() {
       if(this.challenge)return this.challenge.help();
       if(!this.hasMechanicIntro()||this.state!=='play')return;
+      this.rememberHelpReturn();
       this.state='paused';this.clearHover();this.hideTip();
       const rotor=this.level===2;
       this.overlay(`<h2 class="ov-title">${rotor?'旋转方板':'视角拼接'}</h2><p class="ov-sub">新机关 · 先了解怎么玩</p><div class="ov-help"><ul>${rotor?
@@ -1214,6 +1237,7 @@
     },
     showHelp(fromMenu) {
       if(this.challenge&&!fromMenu)return this.challenge.help();
+      this.rememberHelpReturn();
       // 从菜单打开时不能把 state 改成 play，所以两种入口给不同的关闭按钮
       if (!fromMenu && this.state === 'play') this.state = 'paused';
       this.overlay(`
@@ -1243,7 +1267,7 @@
           </ul>
           <h4>机关关卡（均为 5×5）</h4>
           <ul>
-            <li>第 1 关：普通 5×5 消除。菜单的「关卡测试」可以独立体验三种 7×7 关卡，机关按格子尺寸适配。</li>
+            <li>第 1 关：普通 5×5 消除。后续关卡随进度增大尺寸，机关按格子尺寸适配。</li>
             <li>第 2 关：2×3 旋转方板，停 2.4 秒、转 90°，六个方块都能接触主体，同色组合仍需点击消除。</li>
             <li>普通模式随尺寸增加方板数量：5×5 至 9×9 分别有 1 至 5 块。旋转板前四块沿同一面的上、右、下、左轮转，第五块绕周围四个侧面停靠；视角板固定在不同面外侧。</li>
             <li>第 3 关：旁边固定的 2×3 方板。拖动视角，让它与主体的同色方块在画面中边缘对齐相接，然后点击组合消除。单纯重叠不算拼接。</li>

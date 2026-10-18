@@ -7,6 +7,9 @@ test('water scene has an open continuous round pipe and separate animated tank/f
   const world={decorations:[],water:{amount:100,capacity:100,progress:0,flowing:false,leaking:false},time:0};
   ChallengeWaterVisual.create(world);
   const visual=world.waterVisuals;
+  assert.ok(visual.waterVolume.alpha>=.25,'water body must remain visible against dark background');
+  assert.ok(visual.waterSurface.alpha>=.6,'waterline must be clearly visible');
+  assert.ok(visual.ripples.length>=3,'surface highlights make water readable from oblique views');
   assert.ok(visual.pipe.poly.vertices.length>200);
   assert.ok(visual.pipe.alpha<.35);
   assert.ok(visual.flames.length>=5);

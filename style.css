@@ -192,6 +192,9 @@ canvas#gl {
 .hud-mode { font-size: 12px; letter-spacing: .16em; color: #8fa4d8; }
 .hud-level { font-size: 15px; font-weight: 600; margin-top: 2px; }
 .hud-level b { color: #ffd76a; font-size: 18px; }
+.level-back-btn { display:block; min-height:44px; margin-top:4px; padding:0 10px; border:1px solid #667ba7; border-radius:9px; background:#192440; color:#e6edff; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; pointer-events:auto; }
+.level-back-btn:hover { background:#304879; }
+.level-back-btn:focus-visible { outline:3px solid #6bddff; outline-offset:3px; }
 
 .score { font-size: 26px; font-weight: 800; line-height: 1.05; color: #fff;
          text-shadow: 0 0 18px rgba(120,180,255,.5); font-variant-numeric: tabular-nums; }
@@ -312,6 +315,15 @@ canvas#gl {
   box-shadow: 0 24px 70px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.12);
   animation: popIn .35s cubic-bezier(.2,.9,.25,1) both;
 }
+.ov-shell { position:relative; width:100%; max-width:360px; }
+.dialog-back { position:absolute; right:10px; top:10px; z-index:2; min-width:60px; min-height:44px; border:1px solid #7189bf; border-radius:10px; background:#243454; color:#fff; font:inherit; cursor:pointer; }
+.dialog-back[hidden] { display:none; }
+.dialog-back:focus-visible { outline:3px solid #6bddff; outline-offset:2px; }
+.ov-shell:has(.dialog-back:not([hidden])) { padding-top:54px; }
+.ov-shell:has(.dialog-back:not([hidden])) .dialog-back { top:0; }
+.ov-shell:has(.dialog-back:not([hidden])) .ov-card { max-height:calc(88vh - 54px); }
+.level-choice .level-best { margin:7px 2px; color:#fff0b5; font-size:10px; }
+.level-grid:has(.level-best) { grid-template-columns:repeat(3,minmax(0,1fr)); }
 @keyframes popIn { from { opacity:0; transform: scale(.9) translateY(12px);} to { opacity:1; transform:none;} }
 
 .ov-emoji { font-size: 40px; line-height: 1; margin-bottom: 10px; }
@@ -437,6 +449,11 @@ canvas#gl {
   .in-challenge .hud-mode { max-width:150px; font-size:11px; }
 }
 @media(max-height:560px){.challenge-panel { left:auto; right:12px; transform:none; width:300px; bottom:80px; max-height:55vh; }}
+.challenge-panel.marble-panel { left:50%; right:auto; transform:translateX(-50%); bottom:74px; width:min(540px,calc(100% - 24px)); padding:8px; }
+.marble-panel .challenge-tools { margin-top:0; flex-wrap:nowrap; gap:8px; justify-content:center; }
+.marble-panel button.primary { margin-left:0; flex-shrink:0; }
+.marble-panel #marbleStatus { font-size:12px; line-height:1.4; }
+.marble-panel .ammo-color { width:12px; height:12px; margin-right:4px; }
 
 @media (max-width: 420px) {
   .score { font-size: 22px; }

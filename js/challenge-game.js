@@ -27,7 +27,8 @@
       app.hideOverlay();app.hideTip();$('toasts').innerHTML='';$('menu').classList.add('hidden');$('hud').classList.remove('hidden');
       $('hudTimerBox').classList.add('hidden');$('btnMechanicInfo').classList.remove('hidden');
       $('challengePanel').classList.remove('hidden');document.body.classList.add('in-challenge');
-      this.focus=level===4?[.1,1.05,0]:[0,0,0];this.zoom(0);this.bindControls();this.controls();this.syncHud();
+      $('challengePanel').classList.toggle('marble-panel',level===12);
+      this.focus=level===4?[.1,1.05,0]:level===11?[0,1,0]:[0,0,0];this.zoom(0);this.bindControls();this.controls();this.syncHud();
       $('banner').classList.remove('show');
       g.Sfx.start();this.help(true);
     }
@@ -42,7 +43,19 @@
       const sc=this.app.scene;this.app.zoom=Math.max(0,Math.min(1,value));
       const radius=Math.max(1.7,Number(this.world.bounds)||3);
       const angle=Math.min(sc.fov/2,Math.atan(Math.tan(sc.fov/2)*sc.aspect));
-      this.fit=radius/Math.sin(angle)*(this.level===4?.85:[8,11,12].includes(this.level)?1.55:1.3);
+      this.fit=radius/Math.sin(angle)*(this.level===4?.85:this.level===11?1.0:[8,12].includes(this.level)?1.55:1.3);
+      if([11,12].includes(this.level)){
+        const points=[...this.world.cells,...this.world.decorations].flatMap(c=>g.ChallengeProjection.worldVertices({...c,size:[1,1,1]}));
+        const min=[0,1,2].map(a=>Math.min(...points.map(p=>p[a]))),max=[0,1,2].map(a=>Math.max(...points.map(p=>p[a])));
+        this.focus=min.map((v,a)=>(v+max[a])/2);
+        const sy=Math.sin(sc.yaw),cy=Math.cos(sc.yaw),sp=Math.sin(sc.pitch),cp=Math.cos(sc.pitch);
+        const right=[cy,0,-sy],up=[-sp*sy,cp,-sp*cy],back=[cp*sy,sp,cp*cy];
+        const dot=(p,v)=>p.reduce((sum,n,i)=>sum+n*v[i],0),tan=Math.tan(sc.fov/2);
+        this.fit=Math.max(...points.map(point=>{
+          const p=point.map((v,i)=>v-this.focus[i]);
+          return dot(p,back)+Math.max(Math.abs(dot(p,right))/(tan*sc.aspect*.82),Math.abs(dot(p,up))/(tan*.60));
+        }))+.1;
+      }
       sc.dist=this.fit/(1+this.app.zoom*1.5);
       const slider=$('zoomSlider');slider.value=this.app.zoom*100;slider.setAttribute('aria-valuetext',Math.round(100+150*this.app.zoom)+'%');
       this.lastProjection='';
@@ -67,7 +80,7 @@
         sc.particles.update(dt);
       }
       sc.updateCamera(dt);
-      if(this.focus){const radius=Math.max(1.7,Number(this.world.bounds)||3);sc.eye=sc.eye.map((v,i)=>v+this.focus[i]);sc.target=this.focus.map((v,i)=>v-sc.up[i]*radius*(this.hasControls?(this.level===12?.5:.38):0));}
+      if(this.focus){const radius=Math.max(1.7,Number(this.world.bounds)||3);sc.eye=sc.eye.map((v,i)=>v+this.focus[i]);sc.target=this.focus.map((v,i)=>v-sc.up[i]*radius*(this.hasControls&&![11,12].includes(this.level)?.38:0));}
       this.render();
       if(app.state==='play'&&!this.intro){
         const key=Array.from(sc.vp).map(n=>n.toFixed(4)).join(',')+'|'+this.world.cells.map(c=>c.color+':'+c.center.map(n=>n.toFixed(3)).join(',')+':'+(c.basis||IDENTITY).map(n=>n.toFixed(3)).join(',')).join(';');
@@ -197,6 +210,8 @@
       this.app.score=this.world.score;this.app.target=this.world.target;this.app.hideTip();
       if(won){
         const p=this.app.progressFor('challenge');p.cleared[this.level]=0;p.next=Math.min(13,Math.max(p.next,this.level+1));p.score=0;
+        p.best=p.best||{};
+        p.best[this.level]=Math.max(Number(p.best[this.level])||0,this.world.score);
         try{g.localStorage.setItem('popstar3d.progress.challenge.v2',JSON.stringify(p));}catch(e){}
         g.Sfx.levelClear();
       }else g.Sfx.gameOver();
@@ -204,6 +219,7 @@
     }
     help(entry=false){
       if(this.app.state!=='play')return;
+      this.app.rememberHelpReturn();
       this.app.state='paused';
       this.app.overlay(`<h2 class="ov-title">${NAMES[this.level-1]}</h2><div class="ov-help"><p>${escape(this.world.info())}</p><p>拖动旋转，滚轮或左侧滑杆缩放。至少两个同色块共面接触时可消除，只碰角或棱不算实体相邻。视角拼接始终开启，也可转动视角让可见边缘相接。</p><p>不限时，每关从 0 分开始。点击“！”可重新查看说明，说明打开期间场景暂停。</p></div><div class="ov-actions"><button class="ov-btn" data-act="resume">我知道了</button>${!entry&&this.world.phase==='play'&&![4,12].includes(this.level)?'<button class="ov-btn plain" data-act="challengeFinish">结算本关</button>':''}</div>`);
     }
@@ -261,7 +277,7 @@
       }
       if(this.level===12&&$('marbleStatus')){
         const m=w.marble,c=COLORS[m.color];
-        $('marbleStatus').innerHTML='<i class="ammo-color" style="background:rgb('+c.map(v=>Math.round(v*255)).join(',')+')"></i>第 '+Math.min(3,m.drops+1)+' / 3 次 · 碰撞 +100 · 同色槽总分 ×2';
+        $('marbleStatus').innerHTML='<i class="ammo-color" style="background:rgb('+c.map(v=>Math.round(v*255)).join(',')+')"></i>'+Math.min(3,m.drops+1)+' / 3 次 · 碰撞 +100 · 落槽加分';
       }
       const gauge=$('waterGauge');
       if(gauge){

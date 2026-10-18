@@ -64,7 +64,7 @@
       this.components.push(component);
       const G=root.ChallengeGeometry;
       for(const slot of G.make(name,{
-        size,resolution:[8,9,11].includes(this.level)?4:7
+        size,resolution:[8,9,11].includes(this.level)?4:7,smooth:this.level<=8
       })){
         const c=this._cell(add(position,mul(basis,slot.center)),slot.poly,id,{
           ...slot,...extra
@@ -105,8 +105,8 @@
       }
       if(n===7){
         this._shape('torus',2.4);
-        // At this resolution the square band has inner/outer radii .75 and 1.
-        // The smaller perpendicular ring meets those inner square faces exactly.
+        // The smooth inner opening is 75% of the outer radius. Its axial
+        // contact flats meet the smaller perpendicular ring without overlap.
         this._shape('torus',2.4*.75,[0,0,0],rotation('x',Math.PI/2));
         this.bounds=3.1;
       }
@@ -234,7 +234,7 @@
         });
         for(let x=Math.floor((lo[0]-.001)/.5); x<=Math.floor((hi[0]+.001)/.5); x++)for(let y=Math.floor((lo[1]-.001)/.5); y<=Math.floor((hi[1]+.001)/.5); y++)for(let z=Math.floor((lo[2]-.001)/.5); z<=Math.floor((hi[2]+.001)/.5); z++){
           const key=[x,y,z].join(','),list=bucket.get(key)||[];
-          for(const id of list)if(data.get(id).c.component!==c.component||this.level===12||c.attached||data.get(id).c.attached)candidates.add(id+':'+c.id);
+          for(const id of list)if(data.get(id).c.component!==c.component||this.level===12||c.clipped||data.get(id).c.clipped||c.attached||data.get(id).c.attached)candidates.add(id+':'+c.id);
           list.push(c.id);
           bucket.set(key,list);
         }
@@ -458,6 +458,34 @@
       // Adding an already-aligned part can leave its transform unchanged, but
       // still changes the set of contact candidates.
       this.revision++;this._contactCache=null;
+      const dot=(a,b)=>a.reduce((n,v,i)=>n+v*b[i],0),sub=(a,b)=>a.map((v,i)=>v-b[i]),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+      const supports=component=>{
+        const cells=this.cells.filter(c=>c.component===component.id),vertices=cells.flatMap(c=>this._vertices(c)),faces=[];
+        for(const cell of cells){const verts=this._vertices(cell);
+          for(const face of cell.poly.faces){
+            const points=face.map(i=>verts[i]),raw=cross(sub(points[1],points[0]),sub(points[2],points[0])),length=Math.hypot(...raw);
+            if(length<1e-8)continue;
+            const normal=raw.map(v=>v/length),d=dot(normal,points[0]);
+            if(vertices.some(v=>dot(normal,v)>d+1e-7))continue;
+            const center=[0,1,2].map(axis=>points.reduce((n,v)=>n+v[axis],0)/points.length);
+            faces.push({normal,center,area:length});
+          }
+        }
+        return faces;
+      };
+      const sourceFaces=supports(comp).sort((a,b)=>b.area-a.area),destinationFaces=supports(target).sort((a,b)=>b.normal[0]-a.normal[0]||b.area-a.area);
+      const startPosition=comp.position.slice(),startBasis=comp.basis.slice();
+      for(const b of destinationFaces)for(const a of sourceFaces){
+        const to=b.normal.map(v=>-v),axis=cross(a.normal,to),cos=Math.max(-1,Math.min(1,dot(a.normal,to))),sin=Math.hypot(...axis);
+        let rotate;
+        if(sin>1e-8){const n=axis.map(v=>v/sin);rotate=v=>add(add(v.map(x=>x*cos),cross(n,v).map(x=>x*sin)),n.map(x=>x*dot(n,v)*(1-cos)));}
+        else if(cos>0)rotate=v=>v.slice();
+        else {let n=cross(a.normal,Math.abs(a.normal[0])<.8?[1,0,0]:[0,1,0]);const length=Math.hypot(...n);n=n.map(v=>v/length);rotate=v=>n.map((x,i)=>2*x*dot(n,v)-v[i]);}
+        const nextBasis=[0,3,6].flatMap(i=>rotate(startBasis.slice(i,i+3))),offset=rotate(sub(a.center,startPosition));
+        this._transform(comp,sub(b.center,offset),nextBasis);
+        if(!this._assemblyValid().includes('穿透'))return;
+      }
+      this._transform(comp,startPosition,startBasis);
       const all=this.components;
       const own=this.cells.filter(c=>c.component===comp.id).flatMap(c=>this._vertices(c)),other=this.cells.filter(c=>c.component===target.id).flatMap(c=>this._vertices(c));
       const ownMin=Math.min(...own.map(v=>v[0])),otherMax=Math.max(...other.map(v=>v[0]));
@@ -573,10 +601,16 @@
         c.local=c.center.slice();
         return c;
       };
-      // Wall-hugging neutral fillers complete the stepped cross-section.
-      for(let x=0;x<7;x++)for(let z=0;z<7;z++){
-        const immutable=x===0||x===6||z===0||z===6;
-        block([x,1+Math.floor(x/3),z],0,{immutable,...(immutable?{color:6}:{})});
+      // The slope crosses both X walls. Only the two internal Z-edge strips
+      // are immutable; exposed ends seal the actual wall penetrations.
+      for(let x=-1;x<=7;x++)for(let z=0;z<7;z++){
+        const exterior=x<0||x>6,immutable=!exterior&&(z===0||z===6);
+        const row=2+Math.floor(Math.max(0,Math.min(6,x))/3),sideSeal=exterior;
+        const c=block([x,row,z],0,{barrier:'slope',exterior,immutable,sideSeal,seal:sideSeal,
+          ...(sideSeal?{leakGrid:[x<0?0:6,row,z]}:{}),
+          ...(immutable?{color:6}:exterior||x===0||x===6?{color:5}:{})});
+        c.center[1]=.2+(2+x/3)*step;c.local=c.center.slice();
+        c.poly={vertices:c.poly.vertices.map(v=>[v[0],v[1]+v[0]/3,v[2]]),faces:c.poly.faces};
       }
       // Pink floor seals surround the open outlet joint; they never settle.
       for(let x=2;x<=4;x++)for(let z=2;z<=4;z++){
@@ -624,7 +658,7 @@
         }
         water.routeKey=key;
         water.outletAccessible=seen.has('3,0,3');
-        water.failedSeal=this.cells.find(c=>c.seal&&c.color<0&&seen.has(c.grid.join(',')))||null;
+        water.failedSeal=this.cells.find(c=>c.seal&&c.color<0&&seen.has((c.leakGrid||c.grid).join(',')))||null;
       }
       water.leakPosition=water.failedSeal?water.failedSeal.center.slice():null;
       water.leaking=water.amount>0&&!!water.failedSeal;
@@ -662,17 +696,24 @@
       },(_,i)=>({
         target,ring:10-i,score:(10-i)*10,center:[c[0],(i+.5)*.125,.12]
       })));
-      // A single cube grid gives each disk a stepped edge and a solid bullseye.
+      // Interior cubes and clipped boundary blocks form a smooth disk.
       // Keep the front at .09 so aiming and attached shots share the same plane.
       const step=.18,half=step/2;
       for(let target=0; target<2; target++){
         let segment=0;
-        for(let y=-6; y<=6; y++)for(let x=-6; x<=6; x++){
+        for(let y=-7; y<=7; y++)for(let x=-7; x<=7; x++){
           const radius=Math.hypot(x*step,y*step);
-          if(radius>1.25)continue;
+          let poly=cube(half,half,half);
+          for(let side=0;side<96&&poly;side++){
+            const angle=(side+.5)*Math.PI*2/96,normal=[Math.cos(angle),Math.sin(angle),0];
+            poly=root.ChallengeGeometry.clip(poly,normal,this.targetRadius*Math.cos(Math.PI/96)-normal[0]*x*step-normal[1]*y*step);
+          }
+          if(!poly)continue;
           const ring=10-Math.min(9,Math.floor(radius/.125));
-          const center=[this.targetCenters[target][0]+x*step,y*step,0];
-          const c=this._cell(center,cube(half,half,half),target,{
+          const shift=[0,1,2].map(axis=>poly.vertices.reduce((sum,v)=>sum+v[axis],0)/poly.vertices.length);
+          const center=[this.targetCenters[target][0]+x*step+shift[0],y*step+shift[1],shift[2]];
+          poly={vertices:poly.vertices.map(v=>v.map((n,i)=>n-shift[i])),faces:poly.faces};
+          const c=this._cell(center,poly,target,{clipped:true,
             targetIndex:target,ring,segment:segment++,grid:[x,y,0],track:'target:'+target+':'+x,order:y
           });
           if((c.segment+target)%17===0){
@@ -693,7 +734,7 @@
         if(c.color<0&&!c.hole)continue;
         const verts=this._vertices(c),front=Math.max(...verts.map(v=>v[2])),t=(start[2]-front)/(start[2]-end[2]);
         if(t<0||t>stop+1e-8)continue;
-        const p=point(t),face=verts.filter(v=>Math.abs(v[2]-front)<1e-6);
+        const p=point(t),frontFace=c.poly.faces.find(f=>f.every(i=>Math.abs(verts[i][2]-front)<1e-6)),face=frontFace?frontFace.map(i=>verts[i]):[];
         let sign=0,inside=true;
         for(let i=0; i<face.length; i++){
           const a=face[i],b=face[(i+1)%face.length],cross=(b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]);
@@ -856,9 +897,11 @@
       }
       this.ballVisual=[{center:[0,5.25,0],local:[0,0,0],poly:{vertices:vertices.map(v=>v.map(n=>n*.13)),faces},basis:I.slice(),rgb:PALETTE[0],alpha:1}];
       this.decorations.push(...this.ballVisual);
-      for(const x of [-2.8,2.8])this._box([x,.1,0],[.06,5.8,.22],[.5,.7,.8],.3);
+      for(const x of [-2.8,2.8])this._box([x,.1,0],[.12,5.8,.30],[.5,.7,.8],.92);
+      this._box([0,5.85,0],[2.92,.12,.30],[.5,.7,.8],.92);
       this.bins=[0,1,2,3,4];
-      this.binPositions=this.bins.map((color,i)=>({text:'同色 ×2',color,center:[(i-2)*1.08,-5.65,0]}));
+      this.binScores=[100,300,500,300,100];
+      this.binPositions=this.bins.map((color,i)=>({text:String(this.binScores[i]),color,center:[(i-2)*1.08,-5.65,0]}));
       for(let i=0;i<5;i++){
         this._box([(i-2)*1.08,-5.4,0],[.51,.10,.28],PALETTE[i]);
         this._box([(i-2)*1.08-.54,-5.13,0],[.025,.23,.25],PALETTE[i]);
@@ -910,7 +953,7 @@
         if(m.position[1]<-5.05){
           m.bin=Math.max(0,Math.min(4,Math.floor((m.position[0]+2.7)/1.08)));
           m.lastBin=m.bin;
-          if(this.bins[m.bin]===m.color)this.score*=2;
+          this.score+=this.binScores[m.bin];
           m.drops++;m.released=false;
           if(m.drops===m.totalDrops){this.result=this.score>=this.target?'win':'lose';this.phase='finished';this.status='三次弹珠已结束；碰撞 '+m.collisionCount+' 次';}
           else {this.status='已完成 '+m.drops+' / '+m.totalDrops+' 次，准备下一颗弹珠';this._marblePrepare();}
@@ -950,7 +993,7 @@
       if(this.phase==='aim')return '调整抛物线落点并投射；剩余 '+this.ammo.length+' 块';
       if(this.level===9)return this.gears.moving?'齿轮转动中，请等待停靠':'齿轮停靠，可跨接触面消除';
       if(this.level===11)return '左侧 '+this.seesaw.leftCount+' 块 · 右侧 '+this.seesaw.rightCount+' 块 · 分差不超过12保持平衡；当前消除 ×'+this.seesaw.multiplier;
-      if(this.level===12)return '长三角棋盘：只有共边的同色三角块可实体相连。共投放三颗随机颜色弹珠，每次撞击三角块加 100 分；落入同色框时本关总分翻倍。三次结束达到 1500 分过关；弹珠下落时仍可消除障碍。';
+      if(this.level===12)return '长三角棋盘：只有共边的同色三角块可实体相连。共投放三颗随机颜色弹珠，每次撞击三角块加 100 分；落入得分框额外获得 100、300 或 500 分。三次结束达到 1500 分过关；弹珠下落时仍可消除障碍。';
       return '消除相邻同色块；可旋转视角寻找可见接缝';
     }
   }

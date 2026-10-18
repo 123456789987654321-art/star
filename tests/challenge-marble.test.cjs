@@ -8,16 +8,18 @@ test('long marble board uses closed triangular solids and only shared edges conn
  const a=w.cells[0],b=w.cells.find(c=>c.grid[0]===1&&c.grid[1]===1&&c.grid[2]===0);
  assert.ok(!edges.some(e=>e.includes(a.id)&&e.includes(b.id)));
 });
-test('three random colored drops preserve board and double total only for matching bins',()=>{
+test('three random colored drops award the displayed bin scores independently of color',()=>{
  const w=fresh();w.cells.forEach(c=>c.color=-1);w.score=250;
  for(let i=0;i<3;i++){
   const m=w.marble;assert.equal(m.drops,i);assert.ok(w.bins.includes(m.color));assert.equal(m.released,false);
   w.action('release');m.position=[(i===1?0:m.color-2)*1.08,-5.1,0];
   if(i===1)m.position[0]=((m.color+1)%5-2)*1.08;
-  w.update(.01);assert.equal(m.drops,i+1);assert.equal(w.score,[500,500,1000][i]);
+  w.update(.01);assert.equal(m.drops,i+1);assert.equal(w.score,[750,1050,1550][i]);
   if(i<2)assert.equal(w.result,null);
  }
- assert.equal(w.result,'lose');assert.equal(w.phase,'finished');assert.equal(w.target,1500);
+ assert.equal(w.result,'win');assert.equal(w.phase,'finished');assert.equal(w.target,1500);
+ assert.deepEqual(w.binScores,[100,300,500,300,100]);
+ assert.deepEqual(w.binPositions.map(b=>b.text),['100','300','500','300','100']);
 });
 test('triangle edge and corner impacts score once until the ball separates',()=>{
  const w=fresh(),c=w.cells[0];w.cells=[c];c.color=0;

@@ -12,7 +12,7 @@ function fixture(){
 test('holding changes landing distance and releasing launches exactly the preview once',()=>{
   const {world:w,thrower:t,e}=fixture(),ammo=w.ammo.length;
   assert.equal(t.pointerDown(e),true);t.frame(.2);
-  const short=w.trajectory.at(-1).slice();t.frame(1);
+  const short=w.trajectory.at(-1).slice();t.frame(3);
   const long=w.trajectory.at(-1).slice();
   assert.ok(Math.hypot(long[0],long[1]+1.7)>Math.hypot(short[0],short[1]+1.7)+2);
   assert.equal(w.ammo.length,ammo);assert.equal(w.projectile,undefined);
@@ -22,9 +22,11 @@ test('holding changes landing distance and releasing launches exactly the previe
   t.pointerUp(e);assert.equal(w.ammo.length,ammo-1);
   w.update(2);assert.deepEqual(Array.from(w.lastImpact),Array.from(long));
 });
-test('cursor movement changes charged direction, maximum charge does not auto-fire, and pause cancels',()=>{
+test('charge slowly cycles uniformly between zero and maximum without auto-fire; pause cancels',()=>{
   const {world:w,game,thrower:t,e}=fixture(),ammo=w.ammo.length;
-  t.pointerDown(e);t.frame(5);assert.equal(t.power,1);assert.equal(t.charging,true);assert.equal(w.ammo.length,ammo);
+  t.pointerDown(e);t.frame(2);assert.equal(t.power,.5);t.frame(2);assert.equal(t.power,1);
+  t.frame(2);assert.equal(t.power,.5);t.frame(2);assert.equal(t.power,0);t.frame(2);assert.equal(t.power,.5);
+  assert.equal(t.charging,true);assert.equal(w.ammo.length,ammo);
   const before=w.trajectory.at(-1)[0];t.pointerMove({...e,clientX:e.clientX+400});
   assert.ok(w.trajectory.at(-1)[0]>before);
   game.app.state='paused';t.frame(.1);assert.equal(t.charging,false);t.pointerUp(e);assert.equal(w.ammo.length,ammo);

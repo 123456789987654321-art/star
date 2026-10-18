@@ -29,3 +29,19 @@ See docs/superpowers/plans/2026-10-17-level-mechanics.md.
 - Confirmed latest order: 1–4 are 5x5; level 2 black '?' coating, level 3 rotating 2x3 panel, level 4 XY cross tunnel. Max size 8. Reticle aligns current face arrow down and keeps zoom.
 - Pending: size schedule from level 5 (asked asynchronously); default to 5 until configured.
 - Implementation complete: 45 tests and browser checks passed. Publishing pending.
+
+## Active correction — visible water and through-wall sloped barrier
+User supplied screenshots: water must be visible; slope must pass through opposite tank faces, with two internal immutable side fillers and breakable wall penetrations. Plan: add regressions, extend slope and model side leaks, strengthen water surface/volume, run Node and real-browser visual verification. Existing star/main publication destination retained.
+
+## Scope addition — clipped boundary blocks for levels 1–8
+User explicitly allows partly cut solid blocks to make outlines continuous. Keep interior cube grids, clip boundary cubes against planes/curved polygon approximations, preserve solid picking/contacts and ring holes. Apply to first eight levels and assembly thumbnails only; later levels retain their geometry. Water slope becomes continuous, with wall penetration and immutable edge fillers. Validate convex closed nonzero cells, shape boundaries, contact/no-overlap, full tests, browser screenshots.
+
+## Additional user requirements during implementation
+- Level10 slow uniform repeating charge 0→100→0, four seconds each direction; clipped round target rims.
+- Levels11/12 close centered default view, desktop and phone.
+- Level12 visible shell/frame; fixed additive slot scores100,300,500,300,100 replacing same-color doubling.
+- Return-to-picker HUD button; right-side return button attached to help dialog; remove menu test section.
+- Challenge picker historical best clear score per level, max-only updates; current attempt always starts0.
+- Scenario agent owns world and tests; UI agent owns app/game/index/style and UI tests; root owns geometry, water visual, browser checks and integration.
+
+Implementation complete for all listed screenshot corrections and follow-ups.187 Node tests and extended real Edge checks passed; independent review no blockers. Final commit/upload next.

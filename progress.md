@@ -61,3 +61,11 @@ Latest revision: rotor levels now exclusively use physical contacts, including b
 - Fresh node --test: 177/177 passed. Browser suite passed all twelve levels, mouse charging/release, three-drop marble settlement, assembly desktop/touch, water, mobile and normal mode; no JS/WebGL errors.
 - Updated stale browser checks to current charge/release throwing and three-drop scoring, including control refresh between simulated drops. Production code unchanged during continuation.
 - Publication prepared for previously authorized star/main.
+
+## User screenshot corrections — 2026-10-18
+- Implemented visible water and continuous through-wall slope with immutable inner edge fillers and functional side leaks.
+- First eight shapes and assembly miniatures now use clipped closed boundary solids; round target rim likewise. Broad ring contact flats retain no-overlap face contact. Added exact planar-body-volume tests.
+- Charge repeats 0→100→0 at four seconds per leg. Seesaw and marble center/fill viewport. Marble shell/frame strengthened and bins add100/300/500/300/100.
+- Return-to-picker HUD, help return outside scrolling content, removed menu test section. Challenge best-clear map persists max-only scores separately from zero-start attempts.
+- Fresh final Node suite187/187 passed; full extended Edge suite errors=[], failed=[] covering real clicks/touch, mobile layout, score persistence, navigation and side leaks. Screenshots visually inspected. Independent review found no critical/important blockers.
+- Publication preparation pending.
