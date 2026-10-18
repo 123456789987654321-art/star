@@ -114,7 +114,7 @@ test('level selection persists separate completed levels and restores entry scor
   assert.equal(a.progressFor('normal').next,3);assert.equal(a.progressFor('challenge').next,1);
 });
 
-for(const mode of ['normal','challenge'])test(`${mode}: first and next available level are selectable without completing them first`,()=>{
+for(const mode of ['normal'])test(`${mode}: first and next available level are selectable without completing them first`,()=>{
   const {a}=fixture();let html='',starts=0;
   a.overlay=s=>html=s;a.startLevel=()=>starts++;
   a.showLevelSelect(mode);
@@ -124,6 +124,24 @@ for(const mode of ['normal','challenge'])test(`${mode}: first and next available
   assert.match(html,/data-level="2"/);assert.doesNotMatch(html,/data-level="3"/);
   a.startSelectedLevel(mode,2);assert.equal(starts,2);assert.equal(a.score,900);
   a.startSelectedLevel(mode,3);assert.equal(starts,2);
+});
+
+test('challenge exposes all twelve levels for testing with finite replay scores',()=>{
+  const {a}=fixture();let html='',starts=0;
+  a.overlay=s=>html=s;a.startLevel=()=>starts++;
+  a.showLevelSelect('challenge');
+  assert.equal((html.match(/class="level-choice /g)||[]).length,12);
+  for(let level=1;level<=12;level++) {
+    assert.ok(html.includes(`data-level="${level}"`));
+    a.startSelectedLevel('challenge',level);
+    assert.equal(starts,level);assert.equal(a.level,level);assert.ok(Number.isFinite(a.score));
+  }
+  a.startSelectedLevel('challenge',13);assert.equal(starts,12);
+  a.progressCache.challenge={next:20,score:90000,cleared:{3:1200}};
+  a.showLevelSelect('challenge');assert.doesNotMatch(html,/data-act="continueLevels"/);
+  a.startSelectedLevel('challenge',3);assert.equal(a.score,1200);
+  a.mode='challenge';a.level=12;a.target=0;a.showClearPanel();
+  assert.doesNotMatch(html,/data-act="next"/);
 });
 
 test('normal campaign stops at 15 and keeps completed levels replayable',()=>{

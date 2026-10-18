@@ -1,3 +1,14 @@
+## Active request — 2026-10-18 challenge redesign
+
+- Replace timed challenge with twelve geometric/scenario levels; perspective matching in every challenge level.
+- Design: docs/superpowers/specs/2026-10-18-challenge-design.md.
+- User clarified level 8: neutral hidden colors while assembling; assign random colors only on completion, then eliminate assembled model.
+- Current phase: design written; builder check returned "nothing important left"; full design confirmation required by brainstorming before product implementation.
+- Next: incorporate builder check, obtain design response, write implementation plan, implement and verify all twelve levels.
+- No product code changed for this request.
+
+## Previous scope
+
 Latest scope: main-body perspective pairing in ALL formal and test levels. Unique block IDs; visible depth-picked seams; physical adjacency retained. Main5/test7 unchanged. Global scan skips internal faces and physically shared edges. Review regression retains rotating panel as an occluder.
 
 # Current task: level mechanics

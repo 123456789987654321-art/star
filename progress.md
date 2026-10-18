@@ -2,6 +2,17 @@ Latest revision: rotor levels now exclusively use physical contacts, including b
 
 # Progress
 
+## 2026-10-18 challenge redesign
+
+- Follow-up: user requested GitHub upload and all challenge levels open for testing. Opened existing challenge levels 1–12, retained normal locks, used zero entry score for unplayed jump entries, capped picker and completion at 12. New geometry gameplay remains unimplemented design.
+- Regression failed first because challenge level 2 was locked; after patch, node --test passed 83/83. Publishing target is current upstream star/main.
+
+- Inspected README, Board, LevelProfile, challenge timer/progression hooks and existing planning records.
+- Read using-superpowers, brainstorming and planning-with-files skills; plan resolver selected legacy root planning files.
+- Wrote twelve-level design with implementation constraints and acceptance checks; requested fresh builder review.
+- User answered level 8 flow: assemble without visible colors, randomize colors after completion, then eliminate assembled geometry. Incorporated in design.
+- Builder check returned "nothing important left". Product implementation has not started; full design confirmation is next.
+
 - Read current Board, App, Scene and tests; no product changes for mechanics yet.
 - User clarified four-exit XY channel, third-level black '?' coating, and no matching before coating is revealed.
 - Last published commit: 188f039 (camera-relative orbit).

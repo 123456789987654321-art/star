@@ -929,8 +929,8 @@
       }
       const passed = this.score >= this.target;
       if (!passed) { this.gameOver('分数不足'); return; }
-      if(this.mode==='normal'&&this.level===15) {
-        this.overlay(`<div class="ov-emoji">🎉</div><h2 class="ov-title win">普通模式全部通关</h2><p class="ov-sub">完成 15 关 · 总分 ${this.score}</p><div class="ov-actions"><button class="ov-btn" data-act="menu">返回菜单选关</button></div>`);
+      if((this.mode==='normal'&&this.level===15)||(this.mode==='challenge'&&this.level===12)) {
+        this.overlay(`<div class="ov-emoji">🎉</div><h2 class="ov-title win">${this.mode==='normal'?'普通模式全部通关':'挑战测试完成'}</h2><p class="ov-sub">第 ${this.level} 关完成 · 总分 ${this.score}</p><div class="ov-actions"><button class="ov-btn" data-act="menu">返回菜单选关</button></div>`);
         return;
       }
       const nextN = this.cubeSizeFor(this.mode, this.level + 1);
@@ -1004,23 +1004,23 @@
     },
     showLevelSelect(mode) {
       this.selectMode=mode;
-      const p=this.progressFor(mode),count=mode==='normal'?15:Math.max(12,p.next+3);
+      const p=this.progressFor(mode),count=mode==='normal'?15:12;
       let buttons='';
       for(let level=1;level<=count;level++) {
         const cleared=Object.prototype.hasOwnProperty.call(p.cleared,level);
-        const unlocked=cleared||level===p.next;
+        const unlocked=mode==='challenge'||cleared||level===p.next;
         const profile=window.LevelProfile(level,mode);
         const label=cleared?'已通关':unlocked?'可挑战':'🔒';
         buttons+=`<button class="level-choice ${unlocked?'passed':'locked'}" ${unlocked?`data-act="selectLevel" data-level="${level}"`:'disabled'} aria-label="第 ${level} 关，${profile.size}乘${profile.size}，${profile.title}，${unlocked?label:'未解锁'}">${level}<small>${profile.size}×${profile.size}</small><small>${profile.title}</small><small>${label}</small></button>`;
       }
-      const continuation=mode==='normal'&&p.next>15?'<p class="ov-sub">15 关已全部通关，可选择关卡重玩</p>':`<button class="ov-btn" data-act="continueLevels">${p.next===1?'开始闯关':'继续闯关'} · 第 ${p.next} 关</button>`;
-      this.overlay(`<h2 class="ov-title">${mode==='normal'?'普通模式':'挑战模式'} · 选关</h2><p class="ov-sub">彩色关卡可进入 · 通关后解锁下一关</p><div class="level-grid">${buttons}</div><div class="ov-actions">${continuation}<button class="ov-btn plain" data-act="helpClose">返回菜单</button></div>`);
+      const continuation=p.next>count?'<p class="ov-sub">可选择关卡重玩</p>':`<button class="ov-btn" data-act="continueLevels">${p.next===1?'开始闯关':'继续闯关'} · 第 ${p.next} 关</button>`;
+      this.overlay(`<h2 class="ov-title">${mode==='normal'?'普通模式':'挑战模式'} · 选关</h2><p class="ov-sub">${mode==='challenge'?'全部 12 关已开放 · 可任选关卡测试':'彩色关卡可进入 · 通关后解锁下一关'}</p><div class="level-grid">${buttons}</div><div class="ov-actions">${continuation}<button class="ov-btn plain" data-act="helpClose">返回菜单</button></div>`);
     },
     startSelectedLevel(mode,level,continuing=false) {
       const p=this.progressFor(mode);
-      if(!Number.isSafeInteger(level)||(mode==='normal'&&level>15)||!(Object.prototype.hasOwnProperty.call(p.cleared,level)||level===p.next))return;
+      if(!['normal','challenge'].includes(mode)||!Number.isSafeInteger(level)||level<1||level>(mode==='normal'?15:12)||(mode!=='challenge'&&!(Object.prototype.hasOwnProperty.call(p.cleared,level)||level===p.next)))return;
       this.mode=mode;this.level=level;
-      this.score=level===p.next?p.score:p.cleared[level];
+      this.score=level===p.next?p.score:(p.cleared[level]??0);
       this.entryScore=this.score;this.newRecord=false;this.startLevel(true);
     },
     startGame(mode, testLevel = 1) {
