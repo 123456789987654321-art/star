@@ -4,6 +4,8 @@ Latest revision: rotor levels now exclusively use physical contacts, including b
 
 ## 2026-10-18 challenge redesign
 
+- Latest scoring requirement implemented: challenge always starts at zero (selection, legacy replay/continue, next level, restart); clears store no carryover score. Challenge target uses local tile count, currently 500 for existing 5x5 levels. Normal cumulative scoring retained. Three regressions failed before fix; full suite passed 85/85 after fix. GitHub push remains pending exact destination approval following auto-review rejection.
+
 - Follow-up: user requested GitHub upload and all challenge levels open for testing. Opened existing challenge levels 1–12, retained normal locks, used zero entry score for unplayed jump entries, capped picker and completion at 12. New geometry gameplay remains unimplemented design.
 - Regression failed first because challenge level 2 was locked; after patch, node --test passed 83/83. Publishing target is current upstream star/main.
 

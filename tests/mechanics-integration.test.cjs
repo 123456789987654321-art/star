@@ -139,9 +139,31 @@ test('challenge exposes all twelve levels for testing with finite replay scores'
   a.startSelectedLevel('challenge',13);assert.equal(starts,12);
   a.progressCache.challenge={next:20,score:90000,cleared:{3:1200}};
   a.showLevelSelect('challenge');assert.doesNotMatch(html,/data-act="continueLevels"/);
-  a.startSelectedLevel('challenge',3);assert.equal(a.score,1200);
+  a.startSelectedLevel('challenge',3);assert.equal(a.score,0);
   a.mode='challenge';a.level=12;a.target=0;a.showClearPanel();
   assert.doesNotMatch(html,/data-act="next"/);
+});
+
+test('challenge ignores legacy accumulated scores when continuing and saving clears',()=>{
+  const {a,ctx}=fixture();const saved=new Map();
+  ctx.localStorage={setItem:(k,v)=>saved.set(k,v)};
+  a.progressCache={challenge:{next:4,score:9000,cleared:{3:1200}}};
+  a.startLevel=()=>{};a.startSelectedLevel('challenge',4,true);
+  assert.equal(a.score,0);assert.equal(a.entryScore,0);
+  a.score=800;a.target=500;a.recordClear();
+  const record=JSON.parse(saved.get('popstar3d.progress.challenge'));
+  assert.equal(record.score,0);assert.equal(record.cleared[4],0);
+});
+
+test('challenge next-level initialization and restart reset score and use a local target',()=>{
+  const {a,ctx}=fixture();
+  ctx.document.getElementById=()=>({classList:{add(){},remove(){},toggle(){}}});
+  for(const method of ['clearHint','clearHover','spawnTilesFalling','hideOverlay','setZoom','showBanner'])a[method]=()=>{};
+  a.scene.particles.clear=()=>{};
+  a.mode='challenge';a.level=12;a.score=9000;a.entryScore=4000;
+  a.startLevel(false);assert.equal(a.score,0);assert.equal(a.entryScore,0);assert.equal(a.target,500);
+  a.score=300;a.entryScore=4000;a.restart();assert.equal(a.score,0);assert.equal(a.entryScore,0);
+  a.mode='normal';assert.equal(a.targetFor(12,98),36100);
 });
 
 test('normal campaign stops at 15 and keeps completed levels replayable',()=>{

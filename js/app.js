@@ -145,8 +145,9 @@
       return window.LevelProfile(level,mode).size;
     },
     targetFor(level, tiles) {
-      // 沿用每块的目标分比例，按实际外壳块数缩放。
-      const raw = (750 * level + 350 * level * (level - 1)) * (tiles / 150);
+      // 挑战按本关块数独立设定目标；普通模式保留累计目标。
+      const points = this.mode === 'challenge' ? 750 : 750 * level + 350 * level * (level - 1);
+      const raw = points * (tiles / 150);
       return Math.round(raw / 100) * 100;
     },
     starSteps() {
@@ -930,7 +931,7 @@
       const passed = this.score >= this.target;
       if (!passed) { this.gameOver('分数不足'); return; }
       if((this.mode==='normal'&&this.level===15)||(this.mode==='challenge'&&this.level===12)) {
-        this.overlay(`<div class="ov-emoji">🎉</div><h2 class="ov-title win">${this.mode==='normal'?'普通模式全部通关':'挑战测试完成'}</h2><p class="ov-sub">第 ${this.level} 关完成 · 总分 ${this.score}</p><div class="ov-actions"><button class="ov-btn" data-act="menu">返回菜单选关</button></div>`);
+        this.overlay(`<div class="ov-emoji">🎉</div><h2 class="ov-title win">${this.mode==='normal'?'普通模式全部通关':'挑战测试完成'}</h2><p class="ov-sub">第 ${this.level} 关完成 · ${this.mode==='challenge'?'本关得分':'总分'} ${this.score}</p><div class="ov-actions"><button class="ov-btn" data-act="menu">返回菜单选关</button></div>`);
         return;
       }
       const nextN = this.cubeSizeFor(this.mode, this.level + 1);
@@ -944,7 +945,7 @@
         <div class="ov-rows">
           <div class="ov-row"><span>清空奖励</span><b class="green">+${this.levelScoreBonus}</b></div>
           <div class="ov-row"><span>本关目标</span><b>${this.target}</b></div>
-          <div class="ov-row"><span>总分</span><b>${this.score}</b></div>
+          <div class="ov-row"><span>${this.mode==='challenge'?'本关得分':'总分'}</span><b>${this.score}</b></div>
           <div class="ov-row big"><span>下一关目标</span><b class="gold">${this.targetFor(this.level + 1, nextTiles)}</b></div>
         </div>
         <div class="ov-actions">
@@ -1000,6 +1001,7 @@
       const p=this.progressFor(this.mode);
       if(!Object.prototype.hasOwnProperty.call(p.cleared,this.level))p.cleared[this.level]=this.entryScore||0;
       if(this.level>=p.next) {p.next=this.level+1;p.score=this.score;}
+      if(this.mode==='challenge') {p.score=0;p.cleared[this.level]=0;}
       try {window.localStorage.setItem('popstar3d.progress.'+this.mode,JSON.stringify(p));}catch(e) {}
     },
     showLevelSelect(mode) {
@@ -1020,7 +1022,7 @@
       const p=this.progressFor(mode);
       if(!['normal','challenge'].includes(mode)||!Number.isSafeInteger(level)||level<1||level>(mode==='normal'?15:12)||(mode!=='challenge'&&!(Object.prototype.hasOwnProperty.call(p.cleared,level)||level===p.next)))return;
       this.mode=mode;this.level=level;
-      this.score=level===p.next?p.score:(p.cleared[level]??0);
+      this.score=mode==='challenge'?0:(level===p.next?p.score:(p.cleared[level]??0));
       this.entryScore=this.score;this.newRecord=false;this.startLevel(true);
     },
     startGame(mode, testLevel = 1) {
@@ -1033,6 +1035,7 @@
     },
 
     startLevel(first) {
+      if(this.mode==='challenge') {this.score=0;this.newRecord=false;}
       this.entryScore=this.score;
       this.clearHint();
       const N = this.cubeSizeFor(this.mode, this.level);
@@ -1226,7 +1229,7 @@
           <h4>怎么算过关</h4>
           <ul>
             <li>只有视角拼接关可以继续转动视角配对；旋转关还会检查方板后续接触的机会。没有可继续消除的组合时结算，按<em>剩余方块数</em>计算清空奖励。</li>
-            <li>累计分数达到<em>目标分</em>才能进下一关，否则游戏结束。</li>
+            <li>普通模式按累计分数达标；挑战模式每关从 <em>0 分</em>开始，只用本关得分达到<em>本关目标分</em>。</li>
           </ul>
           <h4>操作</h4>
           <ul>
