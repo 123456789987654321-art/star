@@ -106,10 +106,10 @@ test('six face arrows point in the same world direction as falling blocks', () =
   });
 });
 
-test('normal sizes grow every three levels while challenge keeps its existing sizes', () => {
+test('normal sizes grow every three levels while challenge uses seven-grid geometry density', () => {
   assert.deepEqual([1,3,4,6,7,9,10,12,13,15].map(level=>App.cubeSizeFor('normal',level)),[5,5,6,6,7,7,8,8,9,9]);
   for (const mode of ['challenge']) {
-    assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 20].map(level => App.cubeSizeFor(mode, level)), [5, 5, 5, 5, 5, 5, 5, 5]);
+    assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 20].map(level => App.cubeSizeFor(mode, level)), [7, 7, 7, 7, 7, 7, 7, 7]);
   }
 });
 

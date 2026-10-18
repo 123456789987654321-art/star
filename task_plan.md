@@ -1,11 +1,12 @@
 ## Active request — 2026-10-18 challenge redesign
 
+Latest user explicitly requests implementing all 12 levels now. Execution plan: docs/superpowers/plans/2026-10-18-challenge-implementation.md. Implementation complete: geometry, World, projection and adapter; all12 browser entries and real clicks validated, no GL/JS errors.135 Node tests pass; independent review findings fixed. True gear/ring contact, downhill tracks, assembly snap, water seals, target collision, seesaw stops and marble channel verified. Final local commit/upload to authorized star/main in progress. Previous design approval gate superseded by explicit implementation request.
+
 - Replace timed challenge with twelve geometric/scenario levels; perspective matching in every challenge level.
 - Design: docs/superpowers/specs/2026-10-18-challenge-design.md.
 - User clarified level 8: neutral hidden colors while assembling; assign random colors only on completion, then eliminate assembled model.
-- Current phase: design written; builder check returned "nothing important left"; full design confirmation required by brainstorming before product implementation.
-- Next: incorporate builder check, obtain design response, write implementation plan, implement and verify all twelve levels.
-- No product code changed for this request.
+- Current phase: all twelve gameplay implementations verified; commit/upload pending.
+- Design builder review and final code review completed; final code findings resolved.
 
 ## Previous scope
 

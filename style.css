@@ -378,6 +378,44 @@ canvas#gl {
   background: #06070f; color: #ffb4c0;
 }
 
+/* Challenge stage controls share the night-sky game's translucent panels. */
+.challenge-panel { position:fixed; z-index:5; bottom:100px; left:50%; transform:translateX(-50%); width:min(680px,calc(100% - 160px)); max-height:34vh; overflow:auto; padding:12px 16px; border:1px solid rgba(145,180,255,.3); border-radius:18px; background:rgba(12,20,43,.93); box-shadow:0 10px 40px #0005; color:#dae5ff; backdrop-filter:blur(12px); }
+.challenge-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.challenge-heading strong { color:#fff; font-size:17px; }
+.challenge-heading span { color:#a8bedf; font-size:12px; }
+.challenge-panel p { font-size:13px; line-height:1.45; margin:6px 0; }
+#challengeStatus { color:#ffdb81; min-height:18px; }
+.challenge-tools,.challenge-parts { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px; }
+.challenge-panel button,.challenge-panel select { font:inherit; font-size:13px; min-height:44px; padding:8px 12px; border:1px solid #526b9b; border-radius:10px; color:#eef5ff; background:#24365a; cursor:pointer; }
+.challenge-panel button:hover { background:#354e7b; }
+.challenge-panel button:focus-visible,.challenge-panel select:focus-visible,.challenge-panel input:focus-visible { outline:3px solid #ffdb81; outline-offset:2px; }
+.challenge-panel button.primary { background:linear-gradient(120deg,#345fc6,#7555c7); border-color:#9ba7ff; font-weight:700; margin-left:auto; }
+.challenge-panel button:disabled { opacity:.4; cursor:default; }
+.challenge-common { border-top:1px solid #344362; padding-top:8px; }
+.challenge-common button { background:transparent; }
+.challenge-common button[aria-pressed="true"] { border-color:#65c8b7; color:#97efde; }
+.challenge-tools label { display:flex; align-items:center; gap:8px; font-size:13px; }
+.challenge-tools input { max-width:130px; min-height:30px; accent-color:#a68bff; }
+.challenge-adjust summary { cursor:pointer; padding:12px 2px; font-size:13px; color:#b8cbea; }
+#challengeLabels { position:fixed; inset:0; pointer-events:none; z-index:3; }
+#challengeLabels span { position:absolute; transform:translate(-50%,-50%); color:#fff; font-size:14px; font-weight:800; text-shadow:0 2px 6px #000; }
+.challenge-panel { scrollbar-width:thin; scrollbar-color:#526b9b transparent; }
+.ammo-color { display:inline-block; width:18px; height:18px; margin-right:6px; border-radius:4px; vertical-align:middle; border:1px solid #fff8; }
+.in-challenge .zoom-control { bottom:110px; }
+.in-challenge .hud-mode { max-width:210px; }
+@media(max-width:600px){
+  .challenge-panel { width:calc(100% - 24px); bottom:90px; padding:10px 12px; max-height:32vh; }
+  .challenge-heading span { font-size:10px; }
+  .challenge-panel p { font-size:12px; }
+  .challenge-panel button { padding:7px 10px; min-height:44px; }
+  .challenge-parts { display:grid; grid-template-columns:repeat(3,1fr); }
+  .in-challenge .zoom-control { bottom:auto; top:115px; }
+  .in-challenge .zoom-slider-wrap,.in-challenge #zoomSlider { height:100px; }
+  .challenge-tools { gap:6px; }
+  .in-challenge .hud-mode { max-width:150px; font-size:11px; }
+}
+@media(max-height:560px){.challenge-panel { left:auto; right:12px; transform:none; width:300px; bottom:80px; max-height:55vh; }.challenge-heading span{display:none;}}
+
 @media (max-width: 420px) {
   .score { font-size: 22px; }
   .hud-box { padding: 7px 12px; border-radius: 12px; }

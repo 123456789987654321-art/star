@@ -4,6 +4,14 @@ Latest revision: rotor levels now exclusively use physical contacts, including b
 
 ## 2026-10-18 challenge redesign
 
+- Completion verification:135/135 Node tests passed; real Edge runner results all12 GL0, errors=[], failed=[]; actual clicks on10 direct elimination levels, assembly via DOM completion, target hole fill then elimination, water completion persisted, marble success, restartzero, pausefreeze, normal regression,390px layout. Final screenshots verified visible crossed rings, clear water tank/pipe/gate/seal/outlet and all5 marble bins.
+- Independent review resolved internal water gravity and seesaw moving-input issues. Geometry review verified convex planar cells, downhill tracks, ring true contacts and65 sampled gear phases without penetration. Post-removal seam cache and slider pause guard regressions included.
+- Known deliberate limitation documented in README: assembly uses conservative convex support for complex ring interlocking arrangements; ordinary snapped joins work. Browser diagnostics/profile/screenshots ignored under .qa/.
+
+- Actual twelve-level implementation now underway on user's explicit request. Geometry agent owns shape mesh/Scene draw-pick; World agent owns scenarios; projection agent implemented arbitrary-poly visible seams; root owns adapter/UI/App routing.
+- First real Edge headless QA rendered all12, no runtime errors or GL errors; mobile390 no document overflow. Screenshots in ignored .qa/. Fixed browser runner sandbox renderer hang by permitted escalated local-browser run; used ephemeral HTTP port after old runner occupied8136.
+- Review fixes in progress: shape gravity tracks, gear nonpenetration, torus contact patches convexity, assembly validation/snap, accurate projection cache invalidation. Current suite118 passing before further geometry tests.
+
 - Latest scoring requirement implemented: challenge always starts at zero (selection, legacy replay/continue, next level, restart); clears store no carryover score. Challenge target uses local tile count, currently 500 for existing 5x5 levels. Normal cumulative scoring retained. Three regressions failed before fix; full suite passed 85/85 after fix. GitHub push remains pending exact destination approval following auto-review rejection.
 
 - Follow-up: user requested GitHub upload and all challenge levels open for testing. Opened existing challenge levels 1–12, retained normal locks, used zero entry score for unplayed jump entries, capped picker and completion at 12. New geometry gameplay remains unimplemented design.

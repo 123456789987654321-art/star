@@ -10,8 +10,8 @@ test('normal campaign has five sizes with three mechanics per size',()=>{
     assert.equal(profile.size,5+Math.floor((level-1)/3));
     assert.equal(profile.kind,kinds[(level-1)%3]);
   }
-  assert.equal(LevelProfile(4,'challenge').size,5);
-  assert.equal(LevelProfile(4,'challenge').kind,'normal');
+  assert.equal(LevelProfile(4,'challenge').size,7);
+  assert.equal(LevelProfile(4,'challenge').kind,'challenge');
 });
 test('2x3 rotor stays outside the shell and contacts only while its blade reaches the side', () => {
   const b = new Board(5); b.color.fill(0);

@@ -28,6 +28,6 @@ test('independent tests use 7x7 while normal progression remains 5x5', () => {
   for (const level of [1,2,3]) {
     assert.equal(ctx.App.cubeSizeFor('test',level),7);
     assert.equal(ctx.App.cubeSizeFor('normal',level),5);
-    assert.equal(ctx.App.cubeSizeFor('challenge',level),5);
+    assert.equal(ctx.App.cubeSizeFor('challenge',level),7);
   }
 });

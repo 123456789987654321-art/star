@@ -15,7 +15,7 @@
 <div id="menu" class="screen">
   <div class="menu-inner">
     <h1 class="title">消灭星星<span class="t3d">3D</span></h1>
-    <p class="subtitle">立方体 · 六面 · 连消</p>
+    <p class="subtitle">六面消除 · 几何挑战</p>
     <div class="menu-btns">
       <button class="mode-btn m-normal" data-mode="normal">
         <span class="mb-name">普通模式</span>
@@ -87,6 +87,13 @@
 </div>
 
 <span id="hintStatus" class="sr-only" role="status" aria-live="polite"></span>
+<div id="challengeLabels" aria-hidden="true"></div>
+<section id="challengePanel" class="challenge-panel hidden" aria-label="挑战关卡操作">
+  <div class="challenge-heading"><strong id="challengeTitle"></strong><span>不限时 · 每关独立计分</span></div>
+  <p id="challengeInstruction"></p>
+  <p id="challengeStatus" role="status" aria-live="polite"></p>
+  <div id="challengeControls"></div>
+</section>
 
 <div id="toasts"></div>
 <div id="tip"></div>
@@ -99,6 +106,10 @@
 <script src="js/mechanics.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/scene.js"></script>
+<script src="js/challenge-geometry.js"></script>
+<script src="js/challenge-world.js"></script>
+<script src="js/challenge-projection.js"></script>
+<script src="js/challenge-game.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

@@ -33,7 +33,6 @@
     zoom: 0,
     score: 0,
     target: 0,
-    timeLeft: 0,
     tilesAll: 0,
     board: null,
     rotor: null,
@@ -153,9 +152,6 @@
     starSteps() {
       const base = this.targetFor(1, 98) || 500;
       return STAR_MULT.map((m) => Math.round(base * m / 100) * 100);
-    },
-    timeFor(level) {
-      return 62 + Math.min(level - 1, 6) * 4;
     },
 
     /* ============================================================
@@ -323,6 +319,7 @@
       const dt = Math.min(0.05, Math.max(0, (now - this.last) / 1000));
       this.last = now;
       this.clock += dt;
+      if(this.challenge){this.challenge.frame(dt);return;}
 
       if (this.state === 'menu') {
         this.scene.yaw += dt * 0.24;
@@ -384,24 +381,9 @@
         if (this.introLeft <= 0 && !this.introDone) {
           this.introDone = true;
           this.state = 'play';
-          if (this.mode === 'challenge') this.timeLeft = this.timeFor(this.level);
           this.updateHud();
           this.showMechanicIntro();
         }
-      }
-      if (this.state === 'play' && this.mode === 'challenge') {
-        this.timeLeft -= dt;
-        const sec = Math.ceil(this.timeLeft);
-        if (sec !== this.lastTickSec) {
-          this.lastTickSec = sec;
-          if (sec <= 10 && sec > 0 && sec % 2 === 1) window.Sfx.tick();
-        }
-        if (this.timeLeft <= 0) {
-          this.timeLeft = 0;
-          this.gameOver('时间到');
-          return;
-        }
-        if (sec !== this.lastHudSec) { this.lastHudSec = sec; this.updateHud(); }
       }
       if (this.landSfxCd > 0) this.landSfxCd -= dt;
     },
@@ -513,6 +495,7 @@
     },
 
     showHint() {
+      if(this.challenge)return this.challenge.hintGroup();
       if (this.state !== 'play') return;
       this.clearHint();
       this.clearHover();
@@ -578,6 +561,7 @@
     },
 
     clearHover() {
+      if(this.challenge)this.challenge.clearHover();
       if (this.hoverIds) {
         for (let i = 0; i < this.hoverIds.length; i++) {
           const t = this.tiles[this.hoverIds[i]];
@@ -637,6 +621,7 @@
        交互
        ============================================================ */
     setZoom(value) {
+      if(this.challenge)return this.challenge.zoom(value);
       this.zoom = clamp(value, 0, 1);
       this.scene.dist = this.scene.fitDist * 1.25 / (1 + 0.6 * this.zoom);
       const slider = document.getElementById('zoomSlider');
@@ -645,6 +630,7 @@
     },
 
     setZoomFromDistance(distance) {
+      if(this.challenge)return this.setZoom((this.challenge.fit/Math.max(.001,distance)-1)/1.5);
       this.setZoom((this.scene.fitDist * 1.25 / Math.max(distance, 0.001) - 1) / 0.6);
     },
 
@@ -657,6 +643,7 @@
     },
 
     alignCurrentFace() {
+      if(this.challenge)return this.challenge.align();
       if (!this.board) return;
       this.hintCamera = null;
       const sc = this.scene;
@@ -747,6 +734,7 @@
     },
 
     setHover(e) {
+      if(this.challenge)return this.challenge.setHover(e);
       const id = this.scene.pick(
         (e.clientX / window.innerWidth) * 2 - 1,
         -((e.clientY / window.innerHeight) * 2 - 1),
@@ -781,6 +769,7 @@
     },
 
     click(e) {
+      if(this.challenge)return this.challenge.click(e);
       if (this.state !== 'play') return;
       const id = this.scene.pick(
         (e.clientX / window.innerWidth) * 2 - 1,
@@ -812,7 +801,6 @@
       this.trackBest();
       window.Sfx.pop(n);
       this.scene.addShake(Math.min(1.5, 0.22 + n * 0.055));
-      if (this.mode === 'challenge') this.timeLeft = Math.min(999, this.timeLeft + n * 0.5);
 
       let cx = 0, cy = 0, cz = 0;
       for (let i = 0; i < group.length; i++) {
@@ -992,7 +980,7 @@
       this.progressCache=this.progressCache||{};
       if(this.progressCache[mode])return this.progressCache[mode];
       let p=null;
-      try { p=JSON.parse(window.localStorage.getItem('popstar3d.progress.'+mode)); } catch(e) {}
+      try { p=JSON.parse(window.localStorage.getItem('popstar3d.progress.'+mode+(mode==='challenge'?'.v2':''))); } catch(e) {}
       if(!p||!Number.isSafeInteger(p.next)||p.next<1||!Number.isFinite(p.score)||p.score<0||!p.cleared||typeof p.cleared!=='object')p={next:1,score:0,cleared:{}};
       return this.progressCache[mode]=p;
     },
@@ -1013,7 +1001,7 @@
         const unlocked=mode==='challenge'||cleared||level===p.next;
         const profile=window.LevelProfile(level,mode);
         const label=cleared?'已通关':unlocked?'可挑战':'🔒';
-        buttons+=`<button class="level-choice ${unlocked?'passed':'locked'}" ${unlocked?`data-act="selectLevel" data-level="${level}"`:'disabled'} aria-label="第 ${level} 关，${profile.size}乘${profile.size}，${profile.title}，${unlocked?label:'未解锁'}">${level}<small>${profile.size}×${profile.size}</small><small>${profile.title}</small><small>${label}</small></button>`;
+        buttons+=`<button class="level-choice ${unlocked?'passed':'locked'}" ${unlocked?`data-act="selectLevel" data-level="${level}"`:'disabled'} aria-label="第 ${level} 关，${profile.title}，${unlocked?label:'未解锁'}">${level}<small>${mode==='challenge'?'不限时':profile.size+'×'+profile.size}</small><small>${profile.title}</small><small>${label}</small></button>`;
       }
       const continuation=p.next>count?'<p class="ov-sub">可选择关卡重玩</p>':`<button class="ov-btn" data-act="continueLevels">${p.next===1?'开始闯关':'继续闯关'} · 第 ${p.next} 关</button>`;
       this.overlay(`<h2 class="ov-title">${mode==='normal'?'普通模式':'挑战模式'} · 选关</h2><p class="ov-sub">${mode==='challenge'?'全部 12 关已开放 · 可任选关卡测试':'彩色关卡可进入 · 通关后解锁下一关'}</p><div class="level-grid">${buttons}</div><div class="ov-actions">${continuation}<button class="ov-btn plain" data-act="helpClose">返回菜单</button></div>`);
@@ -1035,6 +1023,8 @@
     },
 
     startLevel(first) {
+      if(this.challenge){this.challenge.dispose();this.challenge=null;}
+      if(this.mode==='challenge'&&window.ChallengeGame){this.challenge=new window.ChallengeGame(this,this.level);return;}
       if(this.mode==='challenge') {this.score=0;this.newRecord=false;}
       this.entryScore=this.score;
       this.clearHint();
@@ -1077,7 +1067,7 @@
       const b = document.getElementById('banner');
       b.innerHTML = '<div class="bn-lv">第 ' + this.level + ' 关</div>' +
         '<div class="bn-sub">' + window.LevelProfile(this.level,this.mode).title + ' · '+this.N+'×'+this.N+' · 目标 ' + this.target + ' 分' +
-        (this.mode === 'challenge' ? ' · 限时' : '') + '</div>';
+        '</div>';
       b.classList.remove('show');
       void b.offsetWidth;          // 强制重排，让动画能重播
       b.classList.add('show');
@@ -1086,6 +1076,7 @@
     restart() { this.score=this.entryScore||0;this.newRecord=false;this.startLevel(true); },
 
     toMenu() {
+      if(this.challenge){this.challenge.dispose();this.challenge=null;}
       this.clearHint();
       this.scene.orbit = null;
       this.rotor = null;
@@ -1178,6 +1169,7 @@
         const act = button ? button.dataset.act : null;
         if (!act) return;
         if(act==='selectLevel')this.startSelectedLevel(this.selectMode,Number(button.dataset.level));
+        else if(act==='challengeSelect'){this.toMenu();this.showLevelSelect('challenge');}
         else if(act==='continueLevels')this.startSelectedLevel(this.selectMode,this.progressFor(this.selectMode).next,true);
         else if (act === 'next') {
           this.level++;
@@ -1201,6 +1193,7 @@
       return this.mode==='normal'&&(this.level===2||this.level===3);
     },
     showMechanicIntro() {
+      if(this.challenge)return this.challenge.help();
       if(!this.hasMechanicIntro()||this.state!=='play')return;
       this.state='paused';this.clearHover();this.hideTip();
       const rotor=this.level===2;
@@ -1209,6 +1202,7 @@
         '<li>旁边的 2×3 方板是固定的，试着<em>转动视角</em>。</li><li>让方板与主体的同色块在画面里<em>边缘对齐相接</em>，再点击一起消除。</li><li>主体方块之间也可视角拼接；只碰角、明显空隙或完全遮挡不算。</li>'}</ul><p>想再看一次，点击右下角的“！”。</p></div><div class="ov-actions"><button class="ov-btn" data-act="resume">我知道了</button></div>`);
     },
     showHelp(fromMenu) {
+      if(this.challenge&&!fromMenu)return this.challenge.help();
       // 从菜单打开时不能把 state 改成 play，所以两种入口给不同的关闭按钮
       if (!fromMenu && this.state === 'play') this.state = 'paused';
       this.overlay(`
@@ -1250,6 +1244,7 @@
     },
 
     updateHud() {
+      if(this.challenge)return this.challenge.syncHud();
       const $ = (id) => document.getElementById(id);
       $('hudMode').textContent = this.mode === 'test' ? '关卡测试' : this.mode === 'normal' ? '普通模式' : '挑战模式';
       $('hudLevel').textContent = this.level;
@@ -1262,18 +1257,7 @@
       const stars = steps.map((s) => '<i class="' + (this.score >= s ? 'on' : '') + '">★</i>').join('');
       $('hudStars').innerHTML = stars;
 
-      const box = $('hudTimerBox');
-      if (this.mode === 'challenge') {
-        box.classList.remove('hidden');
-        const t = Math.max(0, this.timeLeft);
-        $('timerNum').textContent = t < 9.95 ? t.toFixed(1) : Math.ceil(t);
-        const full = this.timeFor(this.level);
-        const f = $('timerFill');
-        f.style.width = clamp((t / full) * 100, 0, 100).toFixed(1) + '%';
-        f.classList.toggle('low', t <= 15);
-      } else {
-        box.classList.add('hidden');
-      }
+      $('hudTimerBox').classList.add('hidden');
     },
 
     toast(world, text, cls) {

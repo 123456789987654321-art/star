@@ -161,7 +161,7 @@ test('challenge next-level initialization and restart reset score and use a loca
   for(const method of ['clearHint','clearHover','spawnTilesFalling','hideOverlay','setZoom','showBanner'])a[method]=()=>{};
   a.scene.particles.clear=()=>{};
   a.mode='challenge';a.level=12;a.score=9000;a.entryScore=4000;
-  a.startLevel(false);assert.equal(a.score,0);assert.equal(a.entryScore,0);assert.equal(a.target,500);
+  a.startLevel(false);assert.equal(a.score,0);assert.equal(a.entryScore,0);assert.equal(a.target,1100);
   a.score=300;a.entryScore=4000;a.restart();assert.equal(a.score,0);assert.equal(a.entryScore,0);
   a.mode='normal';assert.equal(a.targetFor(12,98),36100);
 });

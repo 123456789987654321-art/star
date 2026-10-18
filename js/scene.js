@@ -455,6 +455,71 @@
       });
     }
 
+    /** Render the same closed polyhedron used by the ray picker. */
+    drawPoly(model, poly, color, highlight = 0, alpha = 1, hint = 0) {
+      const gl = this.gl, L = this.tileLoc;
+      if (!this.polyBuffers) this.polyBuffers = new WeakMap();
+      let mesh = this.polyBuffers.get(poly);
+      if (!mesh) {
+        const data = { pos: [], nor: [], uv: [], out: [], idx: [] };
+        for (const face of poly.faces) {
+          const a = poly.vertices[face[0]], b = poly.vertices[face[1]], c = poly.vertices[face[2]];
+          const normal = v3.norm(v3.cross(v3.sub(b, a), v3.sub(c, a)));
+          const u = v3.norm(v3.sub(b, a)), v = v3.cross(normal, u);
+          const coords = face.map(i => { const d = v3.sub(poly.vertices[i], a); return [v3.dot(d, u), v3.dot(d, v)]; });
+          const min = [0, 1].map(k => Math.min(...coords.map(q => q[k])));
+          const max = [0, 1].map(k => Math.max(...coords.map(q => q[k])));
+          const base = data.pos.length / 3;
+          face.forEach((index, j) => {
+            data.pos.push(...poly.vertices[index]); data.nor.push(...normal);
+            data.uv.push(...coords[j].map((x, k) => (x - min[k]) / Math.max(1e-9, max[k] - min[k]) - .5));
+            data.out.push(1);
+          });
+          for (let i = 1; i < face.length - 1; i++) data.idx.push(base, base + i, base + i + 1);
+        }
+        mesh = { count: data.idx.length };
+        for (const key of ['pos', 'nor', 'uv', 'out', 'idx']) {
+          mesh[key] = gl.createBuffer();
+          const target = key === 'idx' ? gl.ELEMENT_ARRAY_BUFFER : gl.ARRAY_BUFFER;
+          gl.bindBuffer(target, mesh[key]);
+          gl.bufferData(target, key === 'idx' ? new Uint16Array(data[key]) : new Float32Array(data[key]), gl.STATIC_DRAW);
+        }
+        this.polyBuffers.set(poly, mesh);
+      }
+      for (const [key, attrib, size] of [['pos', L.aPos, 3], ['nor', L.aNormal, 3], ['uv', L.aUV, 2], ['out', L.aOut, 1]]) {
+        if (attrib < 0) continue;
+        gl.bindBuffer(gl.ARRAY_BUFFER, mesh[key]);
+        gl.enableVertexAttribArray(attrib); gl.vertexAttribPointer(attrib, size, gl.FLOAT, false, 0, 0);
+      }
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.idx);
+      gl.uniformMatrix4fv(L.uModel, false, model);
+      gl.uniform3fv(L.uColor, color); gl.uniform2f(L.uFlags, 1, 0);
+      gl.uniform1f(L.uHighlight, highlight); gl.uniform1f(L.uHint, hint);
+      gl.uniform1f(L.uMark, 0); gl.uniform1f(L.uAlpha, alpha);
+      gl.depthMask(alpha > .985);
+      gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_SHORT, 0);
+      this._bindBox(this.progTile, L);
+    }
+
+    static rayPoly(o, d, poly) {
+      let nearest = Infinity;
+      for (const face of poly.faces) {
+        const a = poly.vertices[face[0]];
+        for (let i = 1; i < face.length - 1; i++) {
+          const e1 = v3.sub(poly.vertices[face[i]], a), e2 = v3.sub(poly.vertices[face[i + 1]], a);
+          const h = v3.cross(d, e2), det = v3.dot(e1, h);
+          if (Math.abs(det) < 1e-10) continue;
+          const s = v3.sub(o, a), u = v3.dot(s, h) / det;
+          if (u < -1e-8 || u > 1 + 1e-8) continue;
+          const q = v3.cross(s, e1), v = v3.dot(d, q) / det;
+          if (v < -1e-8 || u + v > 1 + 1e-8) continue;
+          const t = v3.dot(e2, q) / det;
+          if (t >= 0 && t < nearest) nearest = t;
+        }
+      }
+      return nearest;
+    }
+
     drawParticles() {
       const gl = this.gl, p = this.particles;
       if (p.n === 0) return;
@@ -530,7 +595,7 @@
       for (let i = 0; i < tiles.length; i++) {
         const t = tiles[i];
           if (t.pickThrough) continue;
-        const e = t.basis, s = t.size;
+        const e = t.basis || [1, 0, 0, 0, 1, 0, 0, 0, 1], s = t.size || [1, 1, 1];
         const center = t.renderCenter || t.center;
         const dx = ray.o[0] - center[0], dy = ray.o[1] - center[1], dz = ray.o[2] - center[2];
         const lo = [
@@ -543,7 +608,7 @@
           (ray.d[0] * e[3] + ray.d[1] * e[4] + ray.d[2] * e[5]) / s[1],
           (ray.d[0] * e[6] + ray.d[1] * e[7] + ray.d[2] * e[8]) / s[2]
         ];
-        const tt = Scene.rayBox(lo, ld, 0.5);
+        const tt = t.poly ? Scene.rayPoly(lo, ld, t.poly) : Scene.rayBox(lo, ld, 0.5);
         if (tt === Infinity || tt < 0) continue;
         if (tt < bestT) { bestT = tt; bestId = t.id; }
       }
