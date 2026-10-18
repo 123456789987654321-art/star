@@ -9,9 +9,10 @@ function fixture(){
   game.viewLinks=[[1,2],[2,1],[2,3]];game.viewEnabled=true;
   return {game,ctx};
 }
-test('challenge groups join physical and perspective edges once and preserve colors',()=>{
-  const {game}=fixture();assert.deepEqual(Array.from(game.group(0)).sort(),[0,1,2]);
-  game.viewEnabled=false;assert.deepEqual(Array.from(game.group(0)).sort(),[0,1,2]);
+test('challenge groups require a visible seam even when hidden faces physically touch',()=>{
+  const {game}=fixture();assert.deepEqual(Array.from(game.group(0)),[0]);
+  game.viewLinks=[[0,1],[1,2],[2,1],[2,3]];
+  assert.deepEqual(Array.from(game.group(0)).sort(),[0,1,2]);
   game.world.cells[1].color=-1;assert.deepEqual(Array.from(game.group(0)),[0]);
 });
 test('neutral assembly blocks and moving mechanisms cannot be eliminated',()=>{
@@ -74,6 +75,14 @@ test('camera movement immediately removes old projected links and rebuilds after
   assert.equal(game.viewLinks.length,0);assert.equal(game.hover.length,0);assert.equal(game.hint.length,0);
   assert.deepEqual(Array.from(game.group(0)),[0]);
   game.frame(.13);assert.equal(game.viewLinks.length,1);
+});
+
+test('moving mechanisms refresh visible matches on interaction without locking the whole scene',()=>{
+ for(const mechanism of ['water','seesaw','gears']){
+  const {game}=seamFixture();game.world[mechanism]={moving:mechanism!=='gears'};
+  game.world.cells[1].center[0]+=.01;game.frame(.01);
+  assert.deepEqual(Array.from(game.group(0)).sort(),[0,1],mechanism+' retains a current visible match');
+ }
 });
 test('geometry position and basis changes invalidate projected links before another click',()=>{
   const {game}=seamFixture();game.world.cells[1].center[0]=5;game.frame(.01);

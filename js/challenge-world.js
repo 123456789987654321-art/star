@@ -594,7 +594,7 @@
           pipePoints:[[-2.2,0,0],[-2.2,-1,0],[1,-2.4,0],[2,-2.4,0]],pipeRadius:.4,
           fireCenter:[3.4,-4.25,0],step}
       };
-      this.components.push({id:0,name:'阶梯挡板与密封'}, {id:1,name:'升降挡板'});
+      this.components.push({id:0,name:'贯穿斜板与密封'}, {id:1,name:'固定挡板'});
       const block=(grid,component,extra={})=>{
         const center=[-3.4+grid[0]*step,.2+grid[1]*step,-1.2+grid[2]*step];
         const c=this._cell(center,cube(step/2,step/2,step/2),component,{grid,track:'fixed',...extra});
@@ -624,9 +624,9 @@
       if(root.ChallengeWaterVisual)root.ChallengeWaterVisual.create(this);
     }
     _waterUpdate(dt){
-      const water=this.water,t=this.time%8;
-      water.gateMoving=(t>=2.4&&t<4)||t>=6.4;
-      const offset=t<2.4?-1.2:t<4?-1.2+(t-2.4)/1.6*2.4:t<6.4?1.2:1.2-(t-6.4)/1.6*2.4;
+      const water=this.water;
+      water.gateMoving=false;
+      const offset=-1.2;
       water.gateOffset=offset;
       let moved=false;
       for(const c of this.cells)if(c.component===1&&Math.abs(c.center[1]-c.local[1]-offset)>1e-8){
@@ -988,7 +988,7 @@
       return this.result;
     }
     info(){
-      if(this.level===4)return '打通水箱内的斜体挡板和升降横板。灰色边框不能消除；横板上下各移动三格，停稳时可消除。保留管口粉色密封，否则漏水会浪费水量。右上角红线是扑灭剩余火势所需的水量，低于红线即水量不足。';
+      if(this.level===4)return '打通水箱内的贯穿斜板和固定横板。斜板穿过两侧箱壁，内部两条灰色贴边实体不能消除；横板固定不移动。保留管口粉色密封，否则漏水会浪费水量。右上角红线是扑灭剩余火势所需的水量，低于红线即水量不足。';
       if(this.phase==='assemble')return '从模型托盘选取至少两个零件，横向滑动可查看全部模型。点击场景中的零件后移动摆放，贴合面出现白光；电脑再次点击确认，触屏拖动后松手确认。最后点击“完成拼接”，再随机配色开始消除。';
       if(this.phase==='aim')return '调整抛物线落点并投射；剩余 '+this.ammo.length+' 块';
       if(this.level===9)return this.gears.moving?'齿轮转动中，请等待停靠':'齿轮停靠，可跨接触面消除';

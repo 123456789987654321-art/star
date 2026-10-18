@@ -107,18 +107,15 @@ test('small openings in both barriers connect through the tank while other block
   assert.equal(w.water.leaked,0);
 });
 
-test('moving tank plate travels six cell widths and only pauses allow removal',()=>{
+test('tank upper plate remains fixed and removable at every former motion phase',()=>{
   const w=world(),plate=w.cells.filter(c=>c.component===1);
   assert.equal(plate.length,49);
-  const before=plate[0].center.slice(),ids=plate.map(c=>c.id);
-  w.update(2.8);
-  assert.equal(w.water.gateMoving,true);
-  assert.deepEqual(w.remove(ids),[]);
-  assert.equal(plate[0].center[0],before[0]);
-  assert.equal(plate[0].center[2],before[2]);
-  assert.ok(plate[0].center[1]>before[1]);
-  w.update(1.3);
-  assert.equal(w.water.gateMoving,false);
-  assert.ok(Math.abs(plate[0].center[1]-before[1]-2.4)<1e-8);
+  const before=plate.map(c=>c.center.slice()),ids=plate.map(c=>c.id);
+  for(const time of [0,2.8,4.1,6.8,9,18]){
+    w.time=time;w.update(.1);
+    assert.equal(w.water.gateMoving,false);
+    assert.deepEqual(plate.map(c=>c.center),before);
+    assert.ok(ids.every(id=>w.canRemoveCell(id)));
+  }
   assert.equal(w.remove(ids).length,49);
 });

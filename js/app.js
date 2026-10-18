@@ -1014,7 +1014,7 @@
         const profile=window.LevelProfile(level,mode);
         const label=cleared?'已通关':unlocked?'可挑战':'🔒';
         const best=Number.isFinite(p.best?.[level])&&p.best[level]>=0?p.best[level]:0;
-        buttons+=`<button class="level-choice ${unlocked?'passed':'locked'}" ${unlocked?`data-act="selectLevel" data-level="${level}"`:'disabled'} aria-label="第 ${level} 关，${profile.title}，${unlocked?label:'未解锁'}">${level}<small>${mode==='challenge'?'不限时':profile.size+'×'+profile.size}</small><small>${profile.title}</small><small>${label}</small>${mode==='challenge'?`<small class="level-best">历史最高分：${best}</small>`:''}</button>`;
+        buttons+=`<button class="level-choice ${unlocked?'passed':'locked'}" ${unlocked?`data-act="selectLevel" data-level="${level}"`:'disabled'} aria-label="第 ${level} 关，${profile.title}，${unlocked?label:'未解锁'}">${level}${mode==='challenge'?'':`<small>${profile.size}×${profile.size}</small>`}<small>${profile.title}</small><small>${label}</small>${mode==='challenge'?`<small class="level-best">历史最高分：${best}</small>`:''}</button>`;
       }
       const continuation=p.next>count?'<p class="ov-sub">可选择关卡重玩</p>':`<button class="ov-btn" data-act="continueLevels">${p.next===1?'开始闯关':'继续闯关'} · 第 ${p.next} 关</button>`;
       this.overlay(`<h2 class="ov-title">${mode==='normal'?'普通模式':'挑战模式'} · 选关</h2><p class="ov-sub">${mode==='challenge'?'全部 12 关已开放 · 可任选关卡挑战':'彩色关卡可进入 · 通关后解锁下一关'}</p><div class="level-grid">${buttons}</div><div class="ov-actions">${continuation}<button class="ov-btn plain" data-act="helpClose">返回菜单</button></div>`);

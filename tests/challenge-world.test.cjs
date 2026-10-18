@@ -18,6 +18,17 @@ test('solid adjacency rejects diagonal edge contact but accepts a shared face',(
   assert.ok(!w.contacts().some(([a,b])=>a===0&&b===1),'marble blocks also require face contact');
 });
 test('all twelve worlds start independent and expose real cells',()=>{for(let n=1;n<=12;n++){const w=world(n);assert.equal(w.score,0);assert.equal(w.result,null);if(n!==8)assert.ok(w.cells.length>10);assert.equal(new Set(w.cells.map(c=>c.id)).size,w.cells.length);}});
+
+test('every challenge rejects vertex-only physical contact, including clipped blocks',()=>{
+ const poly={vertices:[[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,1],[1,0,1],[1,1,1],[0,1,1]],faces:[[0,3,2,1],[4,5,6,7],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7]]};
+ for(let level=1;level<=12;level++){
+  const w=world(level);
+  w.cells=[[0,0,0],[1,1,1],[1,0,0]].map((center,id)=>({id,center,poly,color:0,component:id,clipped:true}));
+  const pairs=w.contacts();
+  assert.ok(!pairs.some(([a,b])=>a===0&&b===1),'level '+level+' corner');
+  assert.ok(pairs.some(([a,b])=>a===0&&b===2),'level '+level+' face');
+ }
+});
 test('removal scores unique cells and never awards removed slots again',()=>{const w=world(1),ids=w.cells.slice(0,3).map(c=>c.id);assert.equal(w.remove([...ids,ids[0]]).length,3);assert.equal(w.score,45);assert.equal(w.remaining(),w.cells.length-3);});
 test('assembly consumes no random colors until completion and cannot reroll',()=>{let calls=0;const w=world(8,()=>{calls++;return .3;});w.action('add','box');w.action('add','box');assert.equal(calls,0);assert.ok(w.cells.every(c=>c.color===6));assert.equal(w.remove(w.cells.map(c=>c.id)).length,0);w.action('complete');assert.equal(w.phase,'play');assert.ok(calls>0);const colors=w.cells.map(c=>c.color);w.action('complete');assert.deepEqual(w.cells.map(c=>c.color),colors);});
 test('water requires an open physical channel and intact seals',()=>{const w=world(4);w.update(1);assert.equal(w.water.progress,0);w.remove(w.cells.filter(c=>!c.seal).map(c=>c.id));for(let i=0;i<200;i++)w.update(.05);assert.equal(w.result,'win');const leaking=world(4);leaking.remove(leaking.cells.map(c=>c.id));for(let i=0;i<100;i++)leaking.update(.05);assert.equal(leaking.water.leaking,true);assert.notEqual(leaking.result,'win');});
@@ -43,4 +54,4 @@ test('shot block touches target and later shots stack on actual impact surface',
 test('damaged reachable seal records the exact leak origin',()=>{const w=world(4);w.remove(w.cells.map(c=>c.id));w.update(.1);assert.equal(w.water.leaking,true);assert.ok(w.water.leakPosition);assert.ok(w.cells.some(c=>c.seal&&c.color<0&&c.center.every((v,i)=>v===w.water.leakPosition[i])));});
 test('water barrier openings stay fixed without moving seals or wall fillers',()=>{const w=world(4);const fixed=w.cells.filter(c=>c.seal||c.immutable).map(c=>({id:c.id,center:c.center.slice(),color:c.color}));const block=w.cells.find(c=>c.component===0&&!c.seal&&!c.immutable);w.remove([block.id]);assert.equal(block.color,-1);assert.equal(w.moves.length,0);for(const saved of fixed){const current=w.cells.find(c=>c.id===saved.id);assert.deepEqual(current.center,saved.center);assert.equal(current.color,saved.color);}});
 test('resting mechanisms preserve cached contact revision and seesaw stays playable while tilting',()=>{const gear=world(9),revision=gear.revision;gear.update(.1);gear.update(.1);assert.equal(gear.revision,revision);const w=world(11),rest=w.revision;w.update(.1);assert.equal(w.revision,rest);w.remove(w.cells.filter(c=>c.side==='left').slice(0,20).map(c=>c.id));w.update(.05);assert.equal(w.canRemove(),true);assert.ok(w.info().length>0);for(let i=0;i<400;i++)w.update(.1);assert.equal(w.canRemove(),true);const settled=w.revision;w.update(.1);assert.equal(w.revision,settled);});
-test('water upper gate is one cube thick and spans the full tank section',()=>{const w=world(4),gate=w.cells.filter(c=>c.component===1);assert.equal(new Set(gate.map(c=>c.grid[0])).size,7);assert.equal(new Set(gate.map(c=>c.grid[1])).size,1);assert.equal(new Set(gate.map(c=>c.grid[2])).size,7);const before=gate[0].center[1];w.update(2.6);assert.equal(w.water.gateMoving,true);assert.notEqual(gate[0].center[1],before);});
+test('water upper gate is fixed, one cube thick and spans the full tank section',()=>{const w=world(4),gate=w.cells.filter(c=>c.component===1);assert.equal(new Set(gate.map(c=>c.grid[0])).size,7);assert.equal(new Set(gate.map(c=>c.grid[1])).size,1);assert.equal(new Set(gate.map(c=>c.grid[2])).size,7);const before=gate[0].center[1];w.update(2.6);assert.equal(w.water.gateMoving,false);assert.equal(gate[0].center[1],before);});

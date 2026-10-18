@@ -83,7 +83,9 @@
       if(this.focus){const radius=Math.max(1.7,Number(this.world.bounds)||3);sc.eye=sc.eye.map((v,i)=>v+this.focus[i]);sc.target=this.focus.map((v,i)=>v-sc.up[i]*radius*(this.hasControls&&![11,12].includes(this.level)?.38:0));}
       this.render();
       if(app.state==='play'&&!this.intro){
-        const key=Array.from(sc.vp).map(n=>n.toFixed(4)).join(',')+'|'+this.world.cells.map(c=>c.color+':'+c.center.map(n=>n.toFixed(3)).join(',')+':'+(c.basis||IDENTITY).map(n=>n.toFixed(3)).join(',')).join(';');
+        const cameraKey=Array.from(sc.vp).map(n=>n.toFixed(4)).join(',');
+        this.cameraQuiet=cameraKey===this.cameraKey?(this.cameraQuiet||0)+dt:0;this.cameraKey=cameraKey;
+        const key=cameraKey+'|'+this.world.cells.map(c=>c.color+':'+c.center.map(n=>n.toFixed(3)).join(',')+':'+(c.basis||IDENTITY).map(n=>n.toFixed(3)).join(',')).join(';');
         if(key!==this.pendingProjection){this.pendingProjection=key;this.linkTime=0;this.viewLinks=[];this.hover=[];this.hint=[];app.hideTip();}
         else this.linkTime+=dt;
         if(this.slides.size){this.viewLinks=[];this.lastProjection='';this.linkTime=0;}
@@ -149,10 +151,15 @@
     group(id){
       const w=this.world,start=w.cells.find(c=>c.id===id);
       if(!start||start.color<0||start.color>5||!w.canRemove()||(w.canRemoveCell&&!w.canRemoveCell(id)))return [];
+      if((w.water||w.seesaw||w.gears)&&this.cameraQuiet>.12&&!this.slides.size&&this.pendingProjection!==this.lastProjection){
+        this.viewLinks=g.ChallengeProjection.links(this.app.scene,this.tiles);this.lastProjection=this.pendingProjection;
+      }
       const stamp=w.revision??w.cells.map(c=>c.color).join(',');
       if(!this.graph||this.graph.stamp!==stamp||this.graph.links!==this.viewLinks){
         const cells=new Map(w.cells.map(c=>[c.id,c])),neighbors=new Map();
-        const edges=w.contacts().concat(this.viewLinks);
+        // Hidden face contacts must not bridge blocks that only meet at a
+        // visible corner. Projection links require a depth-visible edge run.
+        const edges=this.viewLinks;
         for(const [a,b] of edges){if(!neighbors.has(a))neighbors.set(a,[]);if(!neighbors.has(b))neighbors.set(b,[]);neighbors.get(a).push(b);neighbors.get(b).push(a);}
         this.graph={stamp,links:this.viewLinks,cells,neighbors};
       }

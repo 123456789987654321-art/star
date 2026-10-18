@@ -8,6 +8,41 @@
   const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
   const TAU=Math.PI*2;
 
+  const volume=poly=>Math.abs(poly.faces.reduce((sum,f)=>{
+    const a=poly.vertices[f[0]];
+    for(let i=1;i<f.length-1;i++)sum+=dot(a,cross(poly.vertices[f[i]],poly.vertices[f[i+1]]))/6;
+    return sum;
+  },0));
+  // Keep tiny cut-offs as part of a substantial neighboring block. A compound
+  // retains every original convex solid: no holes, inflated hulls or flat skins.
+  function consolidate(cells){
+    const key=p=>p.map(v=>v.toFixed(7)).join(',');
+    const absolute=c=>c.poly.vertices.map(p=>add(p,c.center));
+    const size=c=>volume(c.poly);
+    const live=new Set(cells),at=new Map();
+    for(const c of cells)for(const p of absolute(c)){
+      const k=key(p);if(!at.has(k))at.set(k,new Set());at.get(k).add(c);
+    }
+    for(const c of cells.slice().sort((a,b)=>size(a)-size(b))){
+      if(!live.has(c)||size(c)>=c.gridStep**3*.15)continue;
+      const verts=absolute(c),candidates=new Map();
+      for(const p of verts)for(const other of at.get(key(p))||[]){
+        if(other===c||!live.has(other))continue;
+        if(!candidates.has(other))candidates.set(other,[]);candidates.get(other).push(p);
+      }
+      const neighbors=[...candidates].filter(([,ps])=>ps.length>=3&&ps.slice(2).some(p=>Math.hypot(...cross(sub(ps[1],ps[0]),sub(p,ps[0])))>1e-9));
+      neighbors.sort((a,b)=>size(b[0])-size(a[0]));
+      if(!neighbors.length)continue;
+      const dest=neighbors[0][0],offset=dest.poly.vertices.length;
+      const parts=(dest.poly.parts||[dest.poly]).concat((c.poly.parts||[c.poly]).map(p=>({vertices:p.vertices.map(v=>add(v,sub(c.center,dest.center))),faces:p.faces})));
+      dest.poly={vertices:dest.poly.vertices.concat(verts.map(p=>sub(p,dest.center))),faces:dest.poly.faces.concat(c.poly.faces.map(f=>f.map(i=>i+offset))),parts};
+      dest.clipped=true;dest.merged=true;
+      for(const p of verts)at.get(key(p)).add(dest);
+      live.delete(c);
+    }
+    return cells.filter(c=>live.has(c));
+  }
+
   // Clip a closed convex solid, retaining actual volume and a shared cap.
   function clip(poly,n,d){
     if(!poly)return null;
@@ -160,7 +195,7 @@
           entry.c.track=key+':segment'+segment;entry.c.order=order++;
         });
       }
-      return cells;
+      return options.smooth?consolidate(cells):cells;
     }
     // One closed trapezoidal prism per radial/height slot. These pieces tile
     // the complete toothed ring; caps and outer walls belong to the same solid.

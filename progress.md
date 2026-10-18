@@ -74,3 +74,9 @@ Latest revision: rotor levels now exclusively use physical contacts, including b
 - Shared Scene camera-distance clamp fits transformed model bounds into viewport with4% edges; challenge panels reserve their occupied bottom area. Normal and challenge rendering both use it, covering slider/wheel/pinch, rotations and resize.
 - Fresh full suite189/189 passed. Extended real Edge QA tested all15 normal and12 challenge levels at1280x900 and390x844 with max zoom plus rotation:54 cases all fit, no GL/JS errors. Screenshot confirmed marble bins above bottom panel. Independent review found no important blockers.
 - User explicitly authorized automatic uploads to star/main for verified future changes.
+
+## Boundary fragments, matching and final water scope ? 2026-10-18
+- Removed challenge-picker untimed label. Tiny cut boundary fragments now share a substantial neighboring solid, preserving exact geometry and volume.
+- Challenge matching requires a depth-visible edge, preventing hidden physical contacts from joining corner-only visible blocks. Mechanism interaction refreshes stale visible links on demand.
+- User narrowed water changes to TWO items: freeze the former moving plate and retain the existing slope passing through opposite tank walls; no third plate. Reverted all unpublished outlet, wall-color, water-volume and scoring changes from the broader water investigation.
+- Added all-twelve-world corner-contact coverage and stationary-plate regression across former motion phases. Final Node suite192/192 passed; real Edge browser checks across all12 challenges completed with errors=[] and failed=[].
