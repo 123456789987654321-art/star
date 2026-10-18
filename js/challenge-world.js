@@ -37,7 +37,7 @@
       this.trajectory=[];
       this.history=[];
       this._build();
-      this.target=(level===4||level===12)?500:Math.max(100,Math.round(this.cells.length*3/50)*50);
+      this.target=level===12?1500:level===4?500:Math.max(100,Math.round(this.cells.length*3/50)*50);
     }
     _cell(center,poly,component,extra={
     }){
@@ -105,20 +105,9 @@
       }
       if(n===7){
         this._shape('torus',2.4);
-        this._shape('torus',2.4*.38/.98,[0,0,0],rotation('x',Math.PI/2));
-        for(const c of this.cells){
-          c.poly={
-            faces:c.poly.faces,vertices:c.poly.vertices.map((v,i)=>{
-              if(i>=3)return v;
-              const w=add(c.center,mul(c.basis,v));
-              if(Math.abs(w[0])<.7||Math.abs(w[0])>1.12||Math.abs(w[1])>.38||Math.abs(w[2])>.38)return v;
-              w[0]=Math.sign(w[0])*.912;
-              const p=w.map((x,k)=>x-c.center[k]);
-              return [c.basis[0]*p[0]+c.basis[1]*p[1]+c.basis[2]*p[2],c.basis[3]*p[0]+c.basis[4]*p[1]+c.basis[5]*p[2],c.basis[6]*p[0]+c.basis[7]*p[1]+c.basis[8]*p[2]];
-            })
-          };
-          c.poly.faces=root.ChallengeGeometry.hull(c.poly.vertices);
-        }
+        // At this resolution the square band has inner/outer radii .75 and 1.
+        // The smaller perpendicular ring meets those inner square faces exactly.
+        this._shape('torus',2.4*.75,[0,0,0],rotation('x',Math.PI/2));
         this.bounds=3.1;
       }
       if(n===8){
@@ -127,26 +116,20 @@
         this.bounds=4;
       }
       if(n===4)this._waterBuild();
-      if(n===9){
-        this._shape('gear',1.65,[-1.520379194001562,0,0],rotation('y',.6391638727765171));
-        this._shape('gear',1.65,[1.520379194001562,0,0],rotation('y',-.442814331927155));
-        this.gears={
-          moving:false,angle:0
-        };
-        this.bounds=3.5;
-      }
+      if(n===9)this._gearsBuild();
       if(n===10)this._targetBuild();
       if(n===11){
         this.seesaw={
-          angle:0,left:2.05,right:2.05
+          angle:0,left:2.05,right:2.05,groupPositions:{left:-2.05,right:2.05},leftCount:0,rightCount:0,balanced:true,multiplier:1.2,imbalanceTime:0,moving:false
         };
         for(const side of ['left','right'])for(let j=0; j<3; j++)this._shape(['box','cylinder','prism'][j],.55,[(side==='left'?-1:1)*2.05,j*1.1+.55,0],I,{
           side
         });
-        this.beam=this._box([0,-.15,0],[3.8,.12,.8],[.38,.48,.58]);
+        this.beam=this._box([0,-.12,0],[3.8,.12,.8],[.38,.48,.58]);
         this._box([0,-.65,0],[.25,.4,.5],[.38,.48,.58]);
-        this.barriers=[this._box([-3.8,.5,0],[.07,.7,.8],[.6,.8,1],.22),this._box([3.8,.5,0],[.07,.7,.8],[.6,.8,1],.22)];
+        this.barriers=[this._box([-3.72,.175,0],[.08,.175,.8],[.46,.59,.71]),this._box([3.72,.175,0],[.08,.175,.8],[.46,.59,.71])];
         this.bounds=4.6;
+        this._seesawState(0);
       }
       if(n===12)this._marbleBuild();
     }
@@ -154,15 +137,17 @@
       return this.cells.reduce((n,c)=>n+(c.color>=0&&c.color<6),0);
     }
     canRemove(){
-      return this.phase==='play'&&!this.result&&!(this.gears&&this.gears.moving)&&!(this.seesaw&&this.seesaw.moving);
+      return this.phase==='play'&&!this.result&&!(this.gears&&this.gears.moving);
     }
     canRemoveCell(id){
       const c=this.cells.find(c=>c.id===id);
-      return !!c&&this.canRemove()&&!(this.level===4&&c.component===1&&this.water.gateMoving);
+      return !!c&&!c.immutable&&this.canRemove()&&!(this.level===4&&c.component===1&&this.water.gateMoving);
     }
     remove(ids){
       this.moves=[];
       if(!this.canRemove())return [];
+      if(this.seesaw)this._seesawState(0);
+      const scoreMultiplier=this.seesaw?this.seesaw.multiplier:1;
       const removed=[];
       for(const id of new Set(ids)){
         const c=this.cells.find(c=>c.id===id);
@@ -172,7 +157,8 @@
         }
       }
       if(!removed.length)return removed;
-      this.score+=5*removed.length*removed.length;
+      this.score+=Math.round(5*removed.length*removed.length*scoreMultiplier);
+      if(this.seesaw)this.lastMultiplier=scoreMultiplier;
       if(this.level!==12){
         const tracks=new Map();
         for(const c of this.cells){
@@ -196,7 +182,7 @@
       }
       this.revision++;
       this._contactCache=null;
-      if(this.seesaw)this.seesaw.moving=true;
+      if(this.seesaw)this._seesawUpdate(0);
       return removed;
     }
     _vertices(c){
@@ -213,13 +199,20 @@
           for(const id of entries){
             if(id===c.id)continue;
             const k=id<c.id?id+':'+c.id:c.id+':'+id;
-            pairs.set(k,(pairs.get(k)||0)+1);
+            const shared=pairs.get(k)||[];
+            if(!shared.some(p=>p.every((x,i)=>Math.abs(x-v[i])<1e-6)))shared.push(v);
+            pairs.set(k,shared);
           }
           entries.push(c.id);
           vertices.set(key,entries);
         }
       }
-      this._contactCache=[...pairs].filter(p=>p[1]>=2).map(p=>p[0].split(':').map(Number));
+      // A corner on the visible shell can extend into a whole internal edge.
+      // Require an area, rather than counting that edge as a neighboring tile.
+      this._contactCache=[...pairs].filter(([,points])=>points.length>=3&&points.slice(2).some(p=>{
+        const a=points[1].map((v,i)=>v-points[0][i]),b=p.map((v,i)=>v-points[0][i]);
+        return Math.hypot(a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0])>1e-8;
+      })).map(p=>p[0].split(':').map(Number));
       const keys=new Set(this._contactCache.map(p=>p.join(':')));
       for(const pair of this._faceContacts()){
         const key=pair.join(':');
@@ -280,7 +273,9 @@
           }
           if(touching)break;
         }
-        if(!touching){
+        // Only meshing gear teeth use edge-to-flank contact. Cube blocks,
+        // including separate assembled parts, must share a face area.
+        if(!touching&&this.level===9){
           for(const [source,dest] of [[a,b],[b,a]]){
             for(const f of faceData(source)){
               for(let k=0; k<f.p.length; k++){
@@ -318,6 +313,7 @@
     }
     _snapshot(){
       this.history.push({
+        assemblyPending:!!this.assemblyPending,selected:this.selected,
         components:this.components.map(c=>({
           ...c,position:c.position.slice(),basis:c.basis.slice()
         })),cells:this.cells.map(c=>({
@@ -328,10 +324,13 @@
     action(name,value){
       if(this.result)return '本关已结束';
       if(this.level===8&&this.phase==='assemble')return this._assembly(name,value);
-      if(name==='aim'&&this.level===10&&this.phase==='aim'){
-        this.aim={
-          x:Number(value.x)||0,y:Number(value.y)||0
-        };
+      if((name==='aim'||name==='throw-aim')&&this.level===10&&this.phase==='aim'){
+        const x=Number(value.x)||0,y=Number(value.y)||0;
+        if(name==='throw-aim'){
+          this.throwPower=Math.max(0,Math.min(1,Number(value.power)||0));
+          const dx=x,dy=y+1.7,length=Math.hypot(dx,dy),range=.3+5.7*this.throwPower;
+          this.aim={x:length>1e-8?dx/length*range:0,y:-1.7+(length>1e-8?dy/length:1)*range};
+        }else this.aim={x,y};
         this._preview();
         return '已更新落点';
       }
@@ -346,11 +345,12 @@
       }
       if(name==='shift'&&this.level===11){
         const side=value.side==='right'?'right':'left';
-        this.seesaw[side]=Math.max(.55,Math.min(2.65,this.seesaw[side]+Number(value.delta)));
-        this._seesawUpdate(.1);
+        const positions=this.seesaw.groupPositions,delta=Number(value.delta)||0;
+        positions[side]=side==='left'?Math.max(-3.09,Math.min(positions.right-1.1,positions.left+delta)):Math.min(3.09,Math.max(positions.left+1.1,positions.right+delta));
+        this._seesawUpdate(0);
         return '已移动集合体';
       }
-      if(name==='release'&&this.level===12&&!this.marble.released){
+      if(name==='release'&&this.level===12&&!this.marble.released&&this.marble.drops<this.marble.totalDrops){
         this.marble.released=true;
         return '弹珠已释放';
       }
@@ -385,6 +385,7 @@
         this._snapshot();
         this.cells=[];
         this.components=[];
+        this.selected=null;this.assemblyPending=false;this.revision++;this._contactCache=null;
         return '已重置';
       }
       if(name==='undo'){
@@ -392,6 +393,8 @@
         if(!old)return '没有可撤销操作';
         this.cells=old.cells;
         this.components=old.components;
+        this.selected=old.selected;this.assemblyPending=!!old.assemblyPending;
+        this.revision++;this._contactCache=null;
         for(const c of this.components)this._transform(c,c.position,c.basis);
         return '已撤销';
       }
@@ -407,6 +410,8 @@
         this._snapshot();
         this.cells=this.cells.filter(c=>c.component!==comp.id);
         this.components=this.components.filter(c=>c!==comp);
+        this.selected=this.components.at(-1)?.id??null;
+        this.revision++;this._contactCache=null;
         return '已移除零件';
       }
       if((name==='translate'||name==='rotate')&&comp){
@@ -425,9 +430,22 @@
         return '已调整零件';
       }
       if(name==='complete'){
+        if(this.assemblyPending)return '请先确认当前零件的摆放';
         if(this.components.length<2)return '至少添加两个零件';
         const validity=this._assemblyValid();
         if(validity)return validity;
+        const byId=new Map(this.cells.map(c=>[c.id,c.component])),linked=new Map(this.components.map(c=>[c.id,[]]));
+        for(const [a,b] of this.contacts()){
+          const first=byId.get(a),second=byId.get(b);
+          if(first===second)continue;
+          linked.get(first).push(second);linked.get(second).push(first);
+        }
+        const connected=new Set(),queue=[this.components[0].id];
+        for(let i=0;i<queue.length;i++){
+          const id=queue[i];if(connected.has(id))continue;
+          connected.add(id);queue.push(...linked.get(id).filter(next=>!connected.has(next)));
+        }
+        if(connected.size!==this.components.length)return '零件必须以实际接触面连成整体，不能只碰到边角';
         for(const c of this.cells)c.color=Math.floor(this.rng()*6);
         this.phase='play';
         this.target=Math.max(100,Math.round(this.cells.length*3/50)*50);
@@ -437,8 +455,41 @@
       return '选择零件后操作';
     }
     _snap(comp,target){
+      // Adding an already-aligned part can leave its transform unchanged, but
+      // still changes the set of contact candidates.
+      this.revision++;this._contactCache=null;
       const all=this.components;
       const own=this.cells.filter(c=>c.component===comp.id).flatMap(c=>this._vertices(c)),other=this.cells.filter(c=>c.component===target.id).flatMap(c=>this._vertices(c));
+      const ownMin=Math.min(...own.map(v=>v[0])),otherMax=Math.max(...other.map(v=>v[0]));
+      // Axis-aligned support faces can meet exactly in one translation. Align
+      // actual face centers, since a stepped outline's extreme face need not
+      // lie at its component center (a center-only snap can touch just a corner).
+      const support=(component,x)=>{
+        const faces=[];
+        for(const c of this.cells)if(c.component===component.id){
+          const vertices=this._vertices(c);
+          for(const face of c.poly.faces){
+            const points=face.map(i=>vertices[i]);
+            if(!points.every(p=>Math.abs(p[0]-x)<1e-7))continue;
+            const area=Math.abs(points.reduce((sum,p,i)=>{const q=points[(i+1)%points.length];return sum+p[1]*q[2]-q[1]*p[2];},0))/2;
+            if(area>1e-8)faces.push([x,points.reduce((n,p)=>n+p[1],0)/points.length,points.reduce((n,p)=>n+p[2],0)/points.length]);
+          }
+        }
+        return faces;
+      };
+      const ownFaces=support(comp,ownMin),targetFaces=support(target,otherMax);
+      let best=null,distance=Infinity;
+      for(const a of ownFaces)for(const b of targetFaces){
+        const d=(a[1]-b[1])**2+(a[2]-b[2])**2;
+        if(d<distance){distance=d;best=[otherMax-ownMin,b[1]-a[1],b[2]-a[2]];}
+      }
+      if(best){
+        const position=comp.position.slice(),basis=comp.basis.slice();
+        this._transform(comp,add(position,best),basis);
+        // Other existing parts must remain disjoint, not only this target.
+        if(!this._assemblyValid().includes('穿透'))return;
+        this._transform(comp,position,basis);
+      }
       let low=target.position[0],high=Math.max(...other.map(v=>v[0]))+Math.max(...own.map(v=>Math.abs(v[0]-comp.position[0])))+1;
       this.components=[target,comp];
       try{
@@ -466,10 +517,12 @@
           map.set(v.map(n=>n.toFixed(5)).join(','),v);
         };
         for(const c of cells){
-          const v=this._vertices(c).slice(0,3);
+          const v=this._vertices(c);
           verts.push(...v);
-          save(axes,cross(sub(v[1],v[0]),sub(v[2],v[0])));
-          for(let k=0; k<3; k++)save(edges,sub(v[(k+1)%3],v[k]));
+          for(const face of c.poly.faces){
+            save(axes,cross(sub(v[face[1]],v[face[0]]),sub(v[face[2]],v[face[0]])));
+            for(let k=0;k<face.length;k++)save(edges,sub(v[face[(k+1)%face.length]],v[face[k]]));
+          }
         }
         return {
           comp,verts,axes:[...axes.values()],edges:[...edges.values()]
@@ -504,147 +557,125 @@
       return seen.size===models.length?'':'零件尚未连接，请使用吸附';
     }
     _waterBuild(){
+      const step=.4;
+      this.bounds=6.7;
       this.water={
-        progress:0,leaking:false,flowing:false,gateMoving:false
+        capacity:100,amount:100,required:35,used:0,leaked:0,progress:0,
+        leaking:false,flowing:false,gateMoving:false,gateOffset:-1.2,leakPosition:null,
+        layout:{tankMin:[-3.6,0,-1.4],tankMax:[-.8,5.6,1.4],
+          pipePoints:[[-2.2,0,0],[-2.2,-1,0],[1,-2.4,0],[2,-2.4,0]],pipeRadius:.4,
+          fireCenter:[3.4,-4.25,0],step}
       };
-      this.bounds=7;
-      const step=.36;
-      for(let component=0; component<3; component++){
-        this.components.push({
-          id:component,name:['堵塞体','移动闸板','穿壁密封体'][component]
-        });
-        for(let x=0; x<(component===1?2:7); x++)for(let y=0; y<7; y++)for(let z=0; z<7; z++){
-          const seal=component===2&&(y===0||y===6||z===0||z===6);
-          const c=this._cell([(component-1)*3+(x-(component===1?.5:3))*step,(y-3)*step,(z-3)*step],cube(step/2,step/2,step/2),component,{
-            seal,grid:[component*10+x+(component===1?3:1),y,z],track:seal?'fixed':'water:'+component+':'+x+':'+z,order:y
-          });
-          c.local=c.center.slice();
-          if(seal)c.color=5;
-        }
+      this.components.push({id:0,name:'阶梯挡板与密封'}, {id:1,name:'升降挡板'});
+      const block=(grid,component,extra={})=>{
+        const center=[-3.4+grid[0]*step,.2+grid[1]*step,-1.2+grid[2]*step];
+        const c=this._cell(center,cube(step/2,step/2,step/2),component,{grid,track:'fixed',...extra});
+        c.local=c.center.slice();
+        return c;
+      };
+      // Wall-hugging neutral fillers complete the stepped cross-section.
+      for(let x=0;x<7;x++)for(let z=0;z<7;z++){
+        const immutable=x===0||x===6||z===0||z===6;
+        block([x,1+Math.floor(x/3),z],0,{immutable,...(immutable?{color:6}:{})});
       }
-      this._box([0,-1.32,0],[5.7,.06,1.32],[.55,.83,1],.28);
-      this._box([0,1.32,0],[5.7,.06,1.32],[.55,.83,1],.23);
-      this._box([0,0,-1.32],[5.7,1.32,.06],[.55,.83,1],.12);
-      this._box([0,0,1.32],[5.7,1.32,.06],[.55,.83,1],.18);
-      this._box([-5.7,2,0],[.8,1.1,1.1],[.3,.7,1],.4);
-      // Bright structural edges keep the transparent plumbing legible on dark backgrounds.
-      const frameColor=[.18,.82,1];
-      for(const y of [-1.32,1.32])for(const z of [-1.32,1.32]){
-        this._box([0,y,z],[5.7,.025,.025],frameColor,.85);
+      // Pink floor seals surround the open outlet joint; they never settle.
+      for(let x=2;x<=4;x++)for(let z=2;z<=4;z++){
+        if(x===3&&z===3)continue;
+        block([x,0,z],0,{seal:true,color:5});
       }
-      for(const x of [-5.7,-4.5,1.7,4.7,5.7]){
-        for(const y of [-1.32,1.32])this._box([x,y,0],[.025,.025,1.32],frameColor,.8);
-        for(const z of [-1.32,1.32])this._box([x,0,z],[.025,1.32,.025],frameColor,.8);
+      for(let x=0;x<7;x++)for(let z=0;z<7;z++){
+        const c=block([x,9,z],1);
+        c.center[1]+=this.water.gateOffset;
       }
-      for(const y of [.9,3.1])for(const z of [-1.1,1.1]){
-        this._box([-5.7,y,z],[.8,.03,.03],frameColor,.9);
-      }
-      for(const x of [-6.5,-4.9])for(const z of [-1.1,1.1]){
-        this._box([x,2,z],[.03,1.1,.03],frameColor,.9);
-      }
-      for(const x of [-6.5,-4.9])for(const y of [.9,3.1]){
-        this._box([x,y,0],[.03,.03,1.1],frameColor,.9);
-      }
-      this._box([-5.7,1.72,0],[.72,.74,1.02],[.06,.55,.95],.55);
-      this._box([-5.7,2.47,0],[.73,.025,1.03],[.25,.87,1],.72);
-      this.waterLabels=[
-        {text:'水箱',center:[-5.7,3.65,0]},
-        {text:'移动闸板',center:[0,3.2,0]},
-        {text:'密封边框',center:[3,2.2,0]},
-        {text:'出水口',center:[5.65,1.8,0]}
-      ];
-      this.waterVisual=this._box([-5.3,0,0],[.2,.3,.3],[.1,.65,1],.65);
-      this.flames=[];
-      for(let i=0; i<5; i++)this.flames.push(...this._decoShape('tetrahedron',.45+(i%2)*.2,[5.55+(i%3-1)*.25,-.65,(Math.floor(i/3)-.5)*.35],i%2?[1,.7,.06]:[1,.28,.025]));
-      for(let i=0; i<3; i++){
-        const log=this._box([5.6,-1.3,(i-1)*.27],[.7,.12,.13],[.35,.16,.06]);
-        log.basis=rotation('y',(i-1)*.4);
-      }
-      this._box([-5.7,.6,0],[.25,.7,.25],[.5,.8,1],.2);
-      this.leakStream=[];
-      for(let i=0; i<9; i++)this.leakStream.push(this._box([3,-1.2-i*.15,0],[.09,.12,.09],[.12,.76,1],0));
-      this.stream=[];
-      for(let i=0; i<7; i++)this.stream.push(this._box([5+i*.1,-.15-i*i*.02,0],[.1,.075,.12],[.1,.7,1],0));
+      if(root.ChallengeWaterVisual)root.ChallengeWaterVisual.create(this);
     }
     _waterUpdate(dt){
-      const t=this.time%4;
-      this.water.gateMoving=t>2.4;
-      const offset=t<=2.4?0:Math.sin((t-2.4)/1.6*Math.PI)*1.5;
+      const water=this.water,t=this.time%8;
+      water.gateMoving=(t>=2.4&&t<4)||t>=6.4;
+      const offset=t<2.4?-1.2:t<4?-1.2+(t-2.4)/1.6*2.4:t<6.4?1.2:1.2-(t-6.4)/1.6*2.4;
+      water.gateOffset=offset;
+      let moved=false;
       for(const c of this.cells)if(c.component===1&&Math.abs(c.center[1]-c.local[1]-offset)>1e-8){
         c.center[1]=c.local[1]+offset;
-        this.revision++;
+        moved=true;
       }
-      const occupied=new Set();
-      for(const c of this.cells)if(c.color>=0){
-        const g=c.grid.slice();
-        if(c.component===1)g[1]+=Math.round(offset/.36);
-        if(g[1]>=0&&g[1]<7)occupied.add(g.join(','));
-      }
-      const queue=[],seen=new Set();
-      for(let y=1; y<6; y++)for(let z=1; z<6; z++){
-        queue.push([0,y,z]);
-        seen.add([0,y,z].join(','));
-      }
-      let outlet=false,leak=false;
-      for(let i=0; i<queue.length; i++){
-        const [x,y,z]=queue[i];
-        if(x===29)outlet=true;
-        if(x>=21&&x<=27&&(y===0||y===6||z===0||z===6))leak=true;
-        for(const d of [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]]){
-          const a=[x+d[0],y+d[1],z+d[2]],k=a.join(',');
-          if(a[0]<0||a[0]>29||a[1]<0||a[1]>6||a[2]<0||a[2]>6||seen.has(k)||occupied.has(k))continue;
-          seen.add(k);
-          queue.push(a);
+      if(moved)this.revision++;
+      // A moving plate occupies both crossed lattice layers. Only changed
+      // solids or a new plate lattice position require another flood fill.
+      const gateRow=9+offset/.4,low=Math.floor(gateRow+1e-8),high=Math.ceil(gateRow-1e-8);
+      const key=low+':'+high+':'+this.cells.map(c=>c.color>=0?'1':'0').join('');
+      if(water.routeKey!==key){
+        const occupied=new Set();
+        for(const c of this.cells)if(c.color>=0){
+          if(c.component===1){
+            occupied.add([c.grid[0],low,c.grid[2]].join(','));
+            occupied.add([c.grid[0],high,c.grid[2]].join(','));
+          }else occupied.add(c.grid.join(','));
         }
-      }
-      this.water.leaking=leak;
-      const failedSeal=leak?this.cells.find(c=>c.seal&&c.color<0&&seen.has(c.grid.join(','))):null;
-      this.water.leakPosition=failedSeal?failedSeal.center.slice():null;
-      for(let i=0; i<this.leakStream.length; i++){
-        const d=this.leakStream[i];
-        d.alpha=failedSeal?.85:0;
-        if(failedSeal){
-          const p=failedSeal.center;
-          const outward=[0,Math.sign(p[1]),Math.sign(p[2])],t=i*.13;
-          d.center=[p[0]+.05*Math.sin(this.time*7+i),p[1]+outward[1]*t-.6*t*t,p[2]+outward[2]*t];
+        const queue=[],seen=new Set(),directions=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+        for(let x=0;x<7;x++)for(let z=0;z<7;z++){
+          const grid=[x,13,z],key=grid.join(',');
+          if(!occupied.has(key)){queue.push(grid);seen.add(key);}
         }
+        for(let i=0;i<queue.length;i++)for(const d of directions){
+          const grid=queue[i].map((v,axis)=>v+d[axis]),key=grid.join(',');
+          if(grid[0]<0||grid[0]>6||grid[1]<0||grid[1]>13||grid[2]<0||grid[2]>6||seen.has(key)||occupied.has(key))continue;
+          seen.add(key);queue.push(grid);
+        }
+        water.routeKey=key;
+        water.outletAccessible=seen.has('3,0,3');
+        water.failedSeal=this.cells.find(c=>c.seal&&c.color<0&&seen.has(c.grid.join(',')))||null;
       }
-      this.water.flowing=outlet&&!leak;
-      if(this.water.flowing)this.water.progress=Math.min(1,this.water.progress+dt/3);
-      this.waterVisual.center=[this.water.flowing?4.8:-5.3,-.2,0];
-      for(let i=0; i<this.flames.length; i++)this.flames[i].alpha=(1-this.water.progress)*(.75+.2*Math.sin(this.time*8+i));
-      for(const d of this.stream)d.alpha=this.water.flowing?.75:0;
-      this.status=leak?'密封破损漏水，请重试':this.water.flowing?'出水灭火 '+Math.round(this.water.progress*100)+'%':'消除内部堵塞，保留粉色密封边框';
-      if(this.water.progress>=1){
-        this.score+=500;
-        this.result='win';
-        this.phase='finished';
+      water.leakPosition=water.failedSeal?water.failedSeal.center.slice():null;
+      water.leaking=water.amount>0&&!!water.failedSeal;
+      water.flowing=water.amount>0&&water.outletAccessible;
+      const fireRate=water.flowing?8:0,leakRate=water.leaking?15:0;
+      if(fireRate+leakRate>0){
+        const duration=Math.min(dt,water.amount/(fireRate+leakRate),fireRate?(water.required-water.used)/fireRate:dt);
+        water.used=Math.min(water.required,water.used+fireRate*duration);
+        water.leaked+=leakRate*duration;
+        water.amount=Math.max(0,water.capacity-water.used-water.leaked);
       }
+      water.progress=water.used/water.required;
+      this.status='剩余水量 '+Math.round(water.amount)+' / '+water.capacity+'；灭火 '+Math.round(water.progress*100)+'%';
+      if(water.leaking)this.status+='；密封破损正在漏水';
+      else if(!water.flowing)this.status+='；打通水箱内两层挡板，保留粉色密封';
+      if(water.used>=water.required-1e-8){
+        water.used=water.required;water.progress=1;
+        this.score+=500;this.result='win';this.phase='finished';
+        this.status='火已扑灭！剩余水量 '+Math.round(water.amount);
+      }else if(water.amount<water.required-water.used-1e-8){
+        this.result='lose';this.phase='finished';
+        this.status='漏水导致剩余水量不足，无法扑灭火焰，请重试';
+      }
+      if(root.ChallengeWaterVisual)root.ChallengeWaterVisual.update(this,dt);
     }
     _targetBuild(){
       this.phase='aim';
       this.bounds=4;
       this.ammo=[];
+      this.throwPower=0;
+      this.targetRadius=1.25;
       this.targetCenters=[[-1.6,0,0],[1.6,0,0]];
       this.targetLabels=this.targetCenters.flatMap((c,target)=>Array.from({
-        length:5
+        length:10
       },(_,i)=>({
-        target,ring:5-i,score:(5-i)*10,center:[c[0],(i+.5)*.25,.12]
+        target,ring:10-i,score:(10-i)*10,center:[c[0],(i+.5)*.125,.12]
       })));
-      for(let target=0; target<2; target++)for(let ring=0; ring<5; ring++){
-        const segments=20;
-        for(let s=0; s<segments; s++){
-          const r0=ring*.25,r1=(ring+1)*.25,a=s*Math.PI*2/segments,b=(s+1)*Math.PI*2/segments;
-          const points=[[r0*Math.cos(a),r0*Math.sin(a)],[r1*Math.cos(a),r1*Math.sin(a)],[r1*Math.cos(b),r1*Math.sin(b)],[r0*Math.cos(b),r0*Math.sin(b)]];
-          const center=[this.targetCenters[target][0]+points.reduce((n,p)=>n+p[0],0)/4,points.reduce((n,p)=>n+p[1],0)/4,0];
-          const vertices=[];
-          for(const z of [-.09,.09])for(const p of points)vertices.push([p[0]+this.targetCenters[target][0]-center[0],p[1]-center[1],z]);
-          const c=this._cell(center,{
-            vertices,faces:[[0,3,2,1],[4,5,6,7],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7]]
-          },target,{
-            targetIndex:target,ring:5-ring,segment:s,track:'target:'+target+':'+Math.round(center[0]*4),order:center[1]
+      // A single cube grid gives each disk a stepped edge and a solid bullseye.
+      // Keep the front at .09 so aiming and attached shots share the same plane.
+      const step=.18,half=step/2;
+      for(let target=0; target<2; target++){
+        let segment=0;
+        for(let y=-6; y<=6; y++)for(let x=-6; x<=6; x++){
+          const radius=Math.hypot(x*step,y*step);
+          if(radius>1.25)continue;
+          const ring=10-Math.min(9,Math.floor(radius/.125));
+          const center=[this.targetCenters[target][0]+x*step,y*step,0];
+          const c=this._cell(center,cube(half,half,half),target,{
+            targetIndex:target,ring,segment:segment++,grid:[x,y,0],track:'target:'+target+':'+x,order:y
           });
-          if((s+ring*3+target)%17===0){
+          if((c.segment+target)%17===0){
             c.color=-1;
             c.hole=true;
             this.ammo.push(Math.floor(this.rng()*6));
@@ -680,8 +711,16 @@
       }
       this.trajectory=[];
       for(let i=0; i<=60; i++)this.trajectory.push(point(stop*i/60));
+      let ring=0;
+      if(hit){
+        const center=this.targetCenters[hit.targetIndex],impact=point(stop);
+        // The thrown cube has a .1 half-width: touching a ring boundary earns
+        // the higher ring. Use impact coordinates, including stacked blocks.
+        const radius=Math.max(0,Math.hypot(impact[0]-center[0],impact[1]-center[1])-.1);
+        ring=Math.max(1,Math.min(10,10-Math.floor((radius-1e-9)/.125)));
+      }
       this.previewHit={
-        id:hit?hit.id:null,ring:hit?hit.ring||0:0,duration:1.2*stop
+        id:hit?hit.id:null,ring,duration:1.2*stop
       };
     }
     _shotUpdate(dt){
@@ -702,7 +741,7 @@
           else{
             this.score+=p.hit.ring*10;
             this._cell([this.lastImpact[0],this.lastImpact[1],this.lastImpact[2]+.1],cube(.1,.1,.1),c.component,{
-              color:p.color,ring:c.ring,targetIndex:c.targetIndex,attached:true
+              color:p.color,ring:p.hit.ring,targetIndex:c.targetIndex,attached:true
             });
           }
         }
@@ -714,97 +753,167 @@
         if(!this.ammo.length)this.phase='play';
       }
     }
-    _seesawUpdate(dt){
-      let left=0,right=0;
-      for(const c of this.cells)if(c.color>=0){
-        const mass=c.volume;
-        if(c.side==='left')left+=mass;
-        else right+=mass;
+    _gearsBuild(){
+      const step=.24,inner=1.1,outer=inner+6*step,base=cube(step/2,step/2,step/2);
+      this.gears={moving:false,angle:0,outer,step,corners:[],hubs:[]};
+      this.bounds=5.7;
+      for(let unit=0;unit<2;unit++){
+        const component={id:unit,name:'gear-plates',position:[(unit?1:-1)*outer,0,0],basis:rotation('z',unit?Math.PI:0)};
+        this.components.push(component);
+        for(let plate=0;plate<5;plate++){
+          const plateBasis=rotation('z',plate*Math.PI*2/5),poly={vertices:base.vertices.map(v=>mul(plateBasis,v)),faces:base.faces};
+          for(let row=0;row<6;row++)for(let column=0;column<5;column++){
+            const local=mul(plateBasis,[inner+(row+.5)*step,(column-2)*step,0]);
+            this._cell(add(component.position,mul(component.basis,local)),poly,unit,{local,basis:component.basis.slice(),plateIndex:plate,plateRow:row,plateColumn:column,track:unit+':plate:'+plate+':column:'+column,order:row});
+          }
+          if(!unit)for(const x of [inner,outer])for(const y of [-2.5*step,2.5*step])this.gears.corners.push(mul(plateBasis,[x,y,0]));
+        }
+        const vertices=[];
+        for(const z of [-.16,-.10])for(let i=0;i<5;i++){
+          const a=(i+.5)*Math.PI*2/5,r=inner/Math.cos(Math.PI/5);
+          vertices.push([Math.cos(a)*r,Math.sin(a)*r,z]);
+        }
+        const hub={center:component.position.slice(),basis:component.basis.slice(),poly:{vertices,faces:root.ChallengeGeometry.hull(vertices)},rgb:[.24,.34,.47],alpha:1};
+        this.decorations.push(hub);this.gears.hubs.push(hub);
       }
-      const torque=left*this.seesaw.left-right*this.seesaw.right;
-      const target=Math.max(-.4,Math.min(.4,torque/(left+right+.001)));
-      this.seesaw.angle+=(target-this.seesaw.angle)*Math.min(1,dt*6);
-      this.seesaw.moving=Math.abs(target-this.seesaw.angle)>.0001;
-      if(!this.seesaw.moving)this.seesaw.angle=target;
-      const basis=rotation('z',this.seesaw.angle);
+    }
+    _gearsUpdate(){
+      const cycle=Math.floor((this.time+1e-9)/3.2),part=Math.max(0,this.time-cycle*3.2);
+      this.gears.moving=part>=2.4;
+      const progress=this.gears.moving?Math.min(1,(part-2.4)/.8):0;
+      const eased=progress*progress*(3-2*progress);
+      this.gears.angle=(cycle+eased)*Math.PI*2/5;
+      const bases=[rotation('z',this.gears.angle),rotation('z',Math.PI-this.gears.angle)];
+      // Open a small working clearance while turning. Exact support extents
+      // keep even the outer square corners on their own side of the gap.
+      const extent=Math.max(...this.gears.corners.map(p=>mul(bases[0],p)[0]));
+      const distance=Math.max(this.gears.outer,extent)+.12*Math.sin(Math.PI*progress);
+      for(let unit=0;unit<2;unit++){
+        const position=[(unit?1:-1)*distance,0,0];
+        this._transform(this.components[unit],position,bases[unit]);
+        this.gears.hubs[unit].center=position.slice();this.gears.hubs[unit].basis=bases[unit].slice();
+      }
+    }
+    _seesawState(dt){
+      const s=this.seesaw;
+      s.leftCount=0;s.rightCount=0;
+      for(const c of this.cells)if(c.color>=0&&c.color<6){
+        const x=s.groupPositions[c.side];
+        if(x<0||(x===0&&c.side==='left'))s.leftCount++;else s.rightCount++;
+      }
+      s.balanced=Math.abs(s.leftCount-s.rightCount)<=12;
+      s.imbalanceTime=s.balanced?0:s.imbalanceTime+Math.max(0,dt);
+      const sameSide=s.groupPositions.left*s.groupPositions.right>0;
+      s.multiplier=s.balanced?1.2:(s.imbalanceTime>=5-1e-9&&sameSide?.8:1);
+      s.left=Math.abs(s.groupPositions.left);s.right=Math.abs(s.groupPositions.right);
+    }
+    _seesawUpdate(dt){
+      const s=this.seesaw,steps=Math.max(1,Math.ceil(dt/.05)),h=Math.max(0,dt)/steps;
+      for(let i=0;i<steps;i++){
+        this._seesawState(h);
+        const target=s.balanced?0:Math.sign(s.leftCount-s.rightCount)*.32;
+        if(s.balanced)s.angle=0;
+        else s.angle+=(target-s.angle)*(1-Math.exp(-h*6));
+        s.moving=Math.abs(target-s.angle)>.0001;
+        if(!s.moving)s.angle=target;
+        // Positive tilt lowers the left end. Both assemblies travel along the
+        // board, including across its pivot, and queue against the solid stops.
+        const shift=-.36*Math.sin(s.angle)/Math.sin(.32)*h,p=s.groupPositions;
+        if(shift<0){p.left=Math.max(-3.09,p.left+shift);p.right=Math.max(p.left+1.1,p.right+shift);}
+        else if(shift>0){p.right=Math.min(3.09,p.right+shift);p.left=Math.min(p.right-1.1,p.left+shift);}
+        this._seesawState(0);
+      }
+      const basis=rotation('z',s.angle);
       for(const comp of this.components){
         const side=this.cells.find(c=>c.component===comp.id).side;
-        const pos=[(side==='left'?-1:1)*this.seesaw[side],comp.position[1],0];
         const baseY=(comp.id%3)*1.1+.55;
-        this._transform(comp,mul(basis,[pos[0],baseY,0]),basis);
+        this._transform(comp,mul(basis,[s.groupPositions[side],baseY,0]),basis);
       }
-      this.beam.basis=basis;
+      this.beam.center=mul(basis,[0,-.12,0]);this.beam.basis=basis;
       for(let i=0; i<2; i++){
-        this.barriers[i].center=mul(basis,[i?3.8:-3.8,.5,0]);
+        this.barriers[i].center=mul(basis,[i?3.72:-3.72,.175,0]);
         this.barriers[i].basis=basis;
       }
     }
     _marbleBuild(){
-      this.bounds=4.6;
-      for(let y=0; y<9; y++)for(let x=0; x<11; x++){
-        const px=(x-5)*.49+(y%2?.16:0);
-        this._cell([px,2-y*.5,0],cube(.245,.25,.18),0,{
-          grid:[x,y]
-        });
+      this.bounds=6.3;
+      const step=.65;
+      for(let y=0;y<14;y++)for(let x=0;x<8;x++)for(let t=0;t<2;t++){
+        const left=-2.6+x*step,bottom=4.55-(y+1)*step;
+        const points=t===0?[[left,bottom],[left+step,bottom],[left+step,bottom+step]]:[[left,bottom],[left+step,bottom+step],[left,bottom+step]];
+        const center=[points.reduce((n,p)=>n+p[0],0)/3,points.reduce((n,p)=>n+p[1],0)/3,0];
+        const vertices=[-.1,.1].flatMap(z=>points.map(p=>[p[0]-center[0],p[1]-center[1],z]));
+        this._cell(center,{vertices,faces:[[0,2,1],[3,4,5],[0,1,4,3],[1,2,5,4],[2,0,3,5]]},0,{grid:[x,y,t]});
       }
-      this.marble={
-        position:[0,3.3,0],velocity:[0,0,0],released:false,bin:null
-      };
-      this.ballVisual=this._decoShape('sphere',.13,this.marble.position,[1,.95,.8]);
-      this._box([-3.1,0,0],[.08,3.5,.3],[.5,.7,.8],.3);
-      this._box([3.1,0,0],[.08,3.5,.3],[.5,.7,.8],.3);
-      this.bins=[100,300,500,300,100];
-      this.binPositions=this.bins.map((score,i)=>({
-        score,center:[(i-2)*1.2,-3.65,0]
-      }));
-      for(let i=0; i<5; i++){
-        this._box([(i-2)*1.2,-3.5,0],[.57,.1,.3],i===2?[.2,.9,.5]:[.4,.55,.7]);
-        this._box([(i-2)*1.2-.6,-3.2,0],[.035,.3,.3],[.6,.8,1],.5);
+      this.marble={position:[0,5.25,0],velocity:[0,0,0],released:false,bin:null,lastBin:null,drops:0,totalDrops:3,color:0,collisionCount:0,contacts:new Set()};
+      // Subdivide a round octahedron independently of the voxel scenery.
+      const vertices=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+      let faces=[[0,2,4],[4,2,1],[1,2,5],[5,2,0],[0,4,3],[4,1,3],[1,5,3],[5,0,3]];
+      for(let pass=0;pass<2;pass++){
+        const mid=new Map(),next=[];
+        const midpoint=(a,b)=>{const key=[a,b].sort((x,y)=>x-y).join(':');if(!mid.has(key)){let p=vertices[a].map((v,i)=>(v+vertices[b][i])/2),len=Math.hypot(...p);p=p.map(v=>v/len);mid.set(key,vertices.length);vertices.push(p);}return mid.get(key);};
+        for(const [a,b,c] of faces){const ab=midpoint(a,b),bc=midpoint(b,c),ca=midpoint(c,a);next.push([a,ab,ca],[ab,b,bc],[ca,bc,c],[ab,bc,ca]);}faces=next;
       }
+      this.ballVisual=[{center:[0,5.25,0],local:[0,0,0],poly:{vertices:vertices.map(v=>v.map(n=>n*.13)),faces},basis:I.slice(),rgb:PALETTE[0],alpha:1}];
+      this.decorations.push(...this.ballVisual);
+      for(const x of [-2.8,2.8])this._box([x,.1,0],[.06,5.8,.22],[.5,.7,.8],.3);
+      this.bins=[0,1,2,3,4];
+      this.binPositions=this.bins.map((color,i)=>({text:'同色 ×2',color,center:[(i-2)*1.08,-5.65,0]}));
+      for(let i=0;i<5;i++){
+        this._box([(i-2)*1.08,-5.4,0],[.51,.10,.28],PALETTE[i]);
+        this._box([(i-2)*1.08-.54,-5.13,0],[.025,.23,.25],PALETTE[i]);
+      }
+      this._marblePrepare();
+    }
+    _marblePrepare(){
+      const m=this.marble;
+      m.position=[0,5.25,0];m.velocity=[0,0,0];m.released=false;m.bin=null;m.contacts.clear();
+      m.color=Math.max(0,Math.min(4,Math.floor(this.rng()*5)));
+      for(const d of this.ballVisual){d.center=m.position.slice();d.rgb=PALETTE[m.color];}
     }
     _marbleUpdate(dt){
-      const m=this.marble;
-      if(!m.released||m.bin!==null)return;
-      const steps=Math.max(1,Math.ceil(dt/.008));
-      for(let s=0; s<steps; s++){
+      const m=this.marble;if(!m.released||m.bin!==null)return;
+      const radius=.13,steps=Math.max(1,Math.ceil(dt/.006));
+      for(let s=0;s<steps;s++){
         const h=dt/steps;
-        m.velocity[1]-=7*h;
-        m.position[0]+=m.velocity[0]*h;
-        m.position[1]+=m.velocity[1]*h;
+        m.velocity[1]=Math.max(-12,m.velocity[1]-7*h);
+        m.position[0]+=m.velocity[0]*h;m.position[1]+=m.velocity[1]*h;
+        const near=new Set();
         for(const c of this.cells){
           if(c.color<0)continue;
-          const dx=m.position[0]-c.center[0],dy=m.position[1]-c.center[1];
-          const nearest=[Math.max(-.245,Math.min(.245,dx)),Math.max(-.25,Math.min(.25,dy))];
-          let nx=dx-nearest[0],ny=dy-nearest[1],dist=Math.hypot(nx,ny);
-          if(dist>=.13)continue;
-          if(dist<1e-8){
-            nx=0;
-            ny=1;
-            dist=1;
+          if(Math.abs(m.position[0]-c.center[0])>.9||Math.abs(m.position[1]-c.center[1])>.9)continue;
+          const points=c.poly.vertices.slice(0,3).map(v=>[c.center[0]+v[0],c.center[1]+v[1]]);
+          let inside=true,distance=Infinity,nearest=null,outward=null;
+          for(let i=0;i<3;i++){
+            const a=points[i],b=points[(i+1)%3],dx=b[0]-a[0],dy=b[1]-a[1],px=m.position[0]-a[0],py=m.position[1]-a[1],len2=dx*dx+dy*dy;
+            if(dx*py-dy*px<0)inside=false;
+            const t=Math.max(0,Math.min(1,(px*dx+py*dy)/len2)),q=[a[0]+t*dx,a[1]+t*dy],dist=Math.hypot(m.position[0]-q[0],m.position[1]-q[1]);
+            if(dist<distance){distance=dist;nearest=q;const len=Math.sqrt(len2);outward=[dy/len,-dx/len];}
           }
-          else{
-            nx/=dist;
-            ny/=dist;
+          if(m.contacts.has(c.id)&&(inside||distance<radius+.04))near.add(c.id);
+          if(!inside&&distance>=radius)continue;
+          near.add(c.id);
+          const nx=inside||distance<1e-10?outward[0]:(m.position[0]-nearest[0])/distance;
+          const ny=inside||distance<1e-10?outward[1]:(m.position[1]-nearest[1])/distance;
+          const overlap=inside?radius+distance:radius-distance;
+          m.position[0]+=nx*(overlap+1e-6);m.position[1]+=ny*(overlap+1e-6);
+          const speed=m.velocity[0]*nx+m.velocity[1]*ny;
+          if(speed<0){
+            if(!m.contacts.has(c.id)&&speed<-.1){this.score+=100;m.collisionCount++;}
+            const bounce=speed<-.65?.40:0;
+            m.velocity[0]-=(1+bounce)*speed*nx;m.velocity[1]-=(1+bounce)*speed*ny;
           }
-          const overlap=.13-(dist===1?0:dist);
-          m.position[0]+=nx*overlap;
-          m.position[1]+=ny*overlap;
-          const dot=m.velocity[0]*nx+m.velocity[1]*ny;
-          if(dot<0){
-            m.velocity[0]-=1.45*dot*nx;
-            m.velocity[1]-=1.45*dot*ny;
-          }
-          if(Math.abs(m.velocity[0])<.02)m.velocity[0]=(c.id%2?1:-1)*.08;
         }
-        if(Math.abs(m.position[0])>2.95){
-          m.position[0]=Math.sign(m.position[0])*2.95;
-          m.velocity[0]*=-.7;
-        }
-        if(m.position[1]<-3.25){
-          m.bin=Math.max(0,Math.min(4,Math.floor((m.position[0]+3)/1.2)));
-          this.score+=this.bins[m.bin];
-          this.result=m.bin===2?'win':'lose';
-          this.phase='finished';
+        // Hysteresis keeps resting contact from awarding points every substep.
+        m.contacts=near;
+        if(Math.abs(m.position[0])>2.61){m.position[0]=Math.sign(m.position[0])*2.61;m.velocity[0]*=-.65;}
+        if(m.position[1]<-5.05){
+          m.bin=Math.max(0,Math.min(4,Math.floor((m.position[0]+2.7)/1.08)));
+          m.lastBin=m.bin;
+          if(this.bins[m.bin]===m.color)this.score*=2;
+          m.drops++;m.released=false;
+          if(m.drops===m.totalDrops){this.result=this.score>=this.target?'win':'lose';this.phase='finished';this.status='三次弹珠已结束；碰撞 '+m.collisionCount+' 次';}
+          else {this.status='已完成 '+m.drops+' / '+m.totalDrops+' 次，准备下一颗弹珠';this._marblePrepare();}
           break;
         }
       }
@@ -815,13 +924,7 @@
       dt=Math.min(dt,5);
       this.time+=dt;
       if(this.level===4)this._waterUpdate(dt);
-      if(this.level===9){
-        const cycle=Math.floor(this.time/3.2),part=this.time%3.2;
-        this.gears.moving=part>=2.4;
-        const amount=cycle+Math.max(0,(part-2.4)/.8);
-        this.gears.angle=amount*Math.PI/4;
-        for(let i=0; i<2; i++)this._transform(this.components[i],[(i?1:-1)*1.520379194001562,0,0],rotation('y',(i?-1:1)*this.gears.angle+(i?-.442814331927155:.6391638727765171)));
-      }
+      if(this.level===9)this._gearsUpdate();
       if(this.level===10)this._shotUpdate(dt);
       if(this.level===11)this._seesawUpdate(dt);
       if(this.level===12)this._marbleUpdate(dt);
@@ -833,7 +936,8 @@
         if(this.water.progress<1)return null;
       }
       if(this.level===12){
-        if(this.marble.bin===null)return null;
+        if(this.marble.drops<this.marble.totalDrops)return null;
+        this.result=this.score>=this.target?'win':'lose';this.phase='finished';return this.result;
       }
       this.score+=Math.max(0,1000-this.remaining()*20);
       this.result=this.score>=this.target?'win':'lose';
@@ -841,13 +945,12 @@
       return this.result;
     }
     info(){
-      if(this.level===4)return this.status||'疏通水管，保留粉色密封边框';
-      if(this.phase==='assemble')return '添加至少两个中性零件，移动旋转后完成拼接';
+      if(this.level===4)return '打通水箱内的斜体挡板和升降横板。灰色边框不能消除；横板上下各移动三格，停稳时可消除。保留管口粉色密封，否则漏水会浪费水量。右上角红线是扑灭剩余火势所需的水量，低于红线即水量不足。';
+      if(this.phase==='assemble')return '从模型托盘选取至少两个零件，横向滑动可查看全部模型。点击场景中的零件后移动摆放，贴合面出现白光；电脑再次点击确认，触屏拖动后松手确认。最后点击“完成拼接”，再随机配色开始消除。';
       if(this.phase==='aim')return '调整抛物线落点并投射；剩余 '+this.ammo.length+' 块';
       if(this.level===9)return this.gears.moving?'齿轮转动中，请等待停靠':'齿轮停靠，可跨接触面消除';
-      if(this.level===11&&this.seesaw.moving)return '跷跷板调整中，请等待平稳后消除';
-      if(this.level===11)return '消除改变重量；移动左右集合体形成接触';
-      if(this.level===12)return this.marble.released?'弹珠与剩余方块碰撞，可继续消除':'先挖通道，再释放弹珠；中央 500 分框为目标';
+      if(this.level===11)return '左侧 '+this.seesaw.leftCount+' 块 · 右侧 '+this.seesaw.rightCount+' 块 · 分差不超过12保持平衡；当前消除 ×'+this.seesaw.multiplier;
+      if(this.level===12)return '长三角棋盘：只有共边的同色三角块可实体相连。共投放三颗随机颜色弹珠，每次撞击三角块加 100 分；落入同色框时本关总分翻倍。三次结束达到 1500 分过关；弹珠下落时仍可消除障碍。';
       return '消除相邻同色块；可旋转视角寻找可见接缝';
     }
   }

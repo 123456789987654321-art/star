@@ -666,6 +666,12 @@
       const canPlay = () => this.state === 'play';
 
       cv.addEventListener('pointerdown', (e) => {
+        if(this.challenge?.thrower?.enabled()){
+          pts.set(e.pointerId,{x:e.clientX,y:e.clientY});cv.setPointerCapture(e.pointerId);
+          if(pts.size>=2){this.challenge.thrower.cancel();const a=[...pts.values()];pinch=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);dragging=true;return;}
+          if(this.challenge.thrower.pointerDown(e))return;
+        }
+        if(this.challenge?.assembly?.pointerDown(e)){cv.setPointerCapture(e.pointerId);return;}
         this.hintCamera = null;
         cv.setPointerCapture(e.pointerId);
         pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -678,6 +684,8 @@
       });
 
       cv.addEventListener('pointermove', (e) => {
+        if(pts.size<2&&this.challenge?.thrower?.pointerMove(e)){const p=pts.get(e.pointerId);if(p){p.x=e.clientX;p.y=e.clientY;}return;}
+        if(this.challenge?.assembly?.pointerMove(e))return;
         const p = pts.get(e.pointerId);
 
         // 未按下：鼠标悬停，预览可消除的组
@@ -706,6 +714,8 @@
       });
 
       const endPointer = (e) => {
+        if(this.challenge?.thrower?.pointerUp(e)){pts.delete(e.pointerId);moved=0;dragging=false;pinch=0;return;}
+        if(this.challenge?.assembly?.pointerUp(e)){pts.delete(e.pointerId);moved=0;dragging=false;pinch=0;return;}
         const wasSingle = pts.size === 1;
         pts.delete(e.pointerId);
         if (!wasSingle) { pinch = 0; return; }
@@ -714,7 +724,7 @@
         moved = 0; dragging = false; pinch = 0;
       };
       cv.addEventListener('pointerup', endPointer);
-      cv.addEventListener('pointercancel', (e) => { pts.delete(e.pointerId); pinch = 0; });
+      cv.addEventListener('pointercancel', (e) => { this.challenge?.assembly?.cancel();this.challenge?.thrower?.cancel();pts.delete(e.pointerId); pinch = 0; });
 
       cv.addEventListener('pointerleave', () => { if (this.state === 'play') this.clearHover(); });
 
@@ -1177,6 +1187,7 @@
         } else if (act === 'retry') this.restart();
         else if (act === 'menu') this.toMenu();
         else if (act === 'resume') this.resume();
+        else if (act === 'challengeFinish' && this.challenge) { this.resume();this.challenge.world.finish();this.challenge.checkResult(); }
         else if (act === 'helpClose') this.hideOverlay();
         else if (act === 'restart') this.restart();
       });

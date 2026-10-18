@@ -56,3 +56,8 @@ Latest revision: rotor levels now exclusively use physical contacts, including b
 - Fresh review: no blockers. Minor deferred: dying tiles read coating from reused board slots, briefly changing their appearance during elimination.
 - Ruling: later levels remain 5x5 pending user schedule (cost: no automatic growth yet).
 
+
+## Continuation verification — 2026-10-18
+- Fresh node --test: 177/177 passed. Browser suite passed all twelve levels, mouse charging/release, three-drop marble settlement, assembly desktop/touch, water, mobile and normal mode; no JS/WebGL errors.
+- Updated stale browser checks to current charge/release throwing and three-drop scoring, including control refresh between simulated drops. Production code unchanged during continuation.
+- Publication prepared for previously authorized star/main.

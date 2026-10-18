@@ -34,96 +34,81 @@
     const s=options.size===undefined?2:options.size;
     const n=Math.max(2,Math.min(16,Math.round(options.resolution||7)));
     const cells=[];
-    // Each surface triangle is a closed truncated wedge, never a flat decal.
-    function cell(outer,inner,track) {
-      if(Math.hypot(...cross(sub(outer[1],outer[0]),sub(outer[2],outer[0])))<1e-9)return;
-      const verts=outer.concat(inner);
-      const center=mul(verts.reduce(add,[0,0,0]),1/6);
-      const vertices=verts.map(v=>sub(v,center));
-      let faces=[[0,1,2],[3,5,4],[0,3,4,1],[1,4,5,2],[2,5,3,0]];
-      for(const f of faces){
-        const a=vertices[f[0]],b=vertices[f[1]],c=vertices[f[2]];
-        if(dot(cross(sub(b,a),sub(c,a)),a)<0)f.reverse();
-      }
-      // Tube wedges can have a twisted side. Use the six-point convex hull
-      // instead of passing a nonplanar quad to the triangle renderer/picker.
-      if(faces.some(f=>{
-        const a=vertices[f[0]],normal=cross(sub(vertices[f[1]],a),sub(vertices[f[2]],a));
-        return vertices.some(p=>dot(normal,sub(p,a))>1e-9)||f.some(i=>Math.abs(dot(normal,sub(vertices[i],a)))>1e-9);
-      })) {
-        faces=hull(vertices);
-      }
-      cells.push({center,poly:{vertices,faces},track,order:0});
-    }
-    function tri(a,b,c,track,inner=p=>mul(p,.88)) {cell([a,b,c],[a,b,c].map(inner),track);}
-    function quad(a,b,c,d,track,inner) {tri(a,b,c,track,inner);tri(a,c,d,track,inner);}
-    function patch(a,b,c,label) {
-      const p=(i,j)=>add(a,add(mul(sub(b,a),i/n),mul(sub(c,a),j/n)));
-      const axis=Math.max(Math.abs(b[1]-a[1]),Math.abs(c[1]-a[1]))>1e-8?1:2;
-      const alongI=Math.abs(b[axis]-a[axis])>Math.abs(c[axis]-a[axis]);
-      for(let i=0;i<n;i++)for(let j=0;j<n-i;j++){
-        const track=label+':'+(alongI?j:i);
-        tri(p(i,j),p(i+1,j),p(i,j+1),track);
-        if(i+j<n-1)tri(p(i+1,j),p(i+1,j+1),p(i,j+1),track);
-      }
-    }
-    function flatMesh(vertices,faces){
-      faces.forEach((f,k)=>{
-        if(f.length===3)patch(...f.map(i=>vertices[i]),'face'+k);
-        else {
-          const [a,b,c,d]=f.map(i=>vertices[i]);
-          const axis=Math.max(Math.abs(b[1]-a[1]),Math.abs(d[1]-a[1]))>1e-8?1:2;
-          const alongI=Math.abs(b[axis]-a[axis])>Math.abs(d[axis]-a[axis]);
-          const p=(i,j)=>add(add(mul(a,(1-i/n)*(1-j/n)),mul(b,i/n*(1-j/n))),add(mul(c,i/n*j/n),mul(d,(1-i/n)*j/n)));
-          for(let i=0;i<n;i++)for(let j=0;j<n;j++)quad(p(i,j),p(i+1,j),p(i+1,j+1),p(i,j+1),'face'+k+':'+(alongI?j:i));
+    // Solid grid pieces share only complete square faces. No independent cap
+    // skin overlaps the side wall, and no radial fan is needed at the poles.
+    if(name!=='gear'){
+      const ring=name==='torus';
+      const count=ring?Math.max(16,Math.ceil(n*2/4)*4):Math.max(7,n);
+      const extent=s,step=2*extent/count,half=step/2;
+      const poly={vertices:[[-half,-half,-half],[half,-half,-half],[half,half,-half],[-half,half,-half],[-half,-half,half],[half,-half,half],[half,half,half],[-half,half,half]],faces:[[0,3,2,1],[4,5,6,7],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7]]};
+      const inside=(x,y,z)=>{
+        if(name==='box')return true;
+        if(name==='cylinder')return x*x+z*z<=s*s;
+        if(name==='sphere')return x*x+y*y+z*z<=s*s;
+        if(name==='frustum'){const width=s*(.74-.26*y/s);return Math.abs(x)<=width&&Math.abs(z)<=width;}
+        if(name==='prism')return Math.abs(x)<=(s-y)/2;
+        if(name==='tetrahedron'){
+          const t=(s-y)/(2*s),z0=-s*.7*t,z1=s*t;
+          return z>=z0&&z<=z1&&Math.abs(x)<=(z1-z)/1.7;
         }
-      });
-    }
-    if(name==='tetrahedron'){
-      flatMesh([[0,s,0],[-s,-s,-s*.7],[s,-s,-s*.7],[0,-s,s]].map(p=>mul(p,.85)),[[0,1,2],[0,2,3],[0,3,1],[1,3,2]]);
-    }else if(name==='box'||name==='frustum'){
-      const top=name==='frustum'?.48:1;
-      flatMesh([[-s,-s,-s],[s,-s,-s],[s,-s,s],[-s,-s,s],[-s*top,s,-s*top],[s*top,s,-s*top],[s*top,s,s*top],[-s*top,s,s*top]],[[0,1,2,3],[4,7,6,5],[0,4,5,1],[1,5,6,2],[2,6,7,3],[3,7,4,0]]);
-    }else if(name==='prism'){
-      flatMesh([[-s,-s,-s],[s,-s,-s],[0,s,-s],[-s,-s,s],[s,-s,s],[0,s,s]],[[0,2,1],[3,4,5],[0,1,4,3],[1,2,5,4],[2,0,3,5]]);
-    }else if(name==='sphere'){
-      const m=n*3, rows=n*2;
-      const p=(i,j)=>{const a=TAU*i/m,b=Math.PI*j/rows;return [s*Math.sin(b)*Math.cos(a),s*Math.cos(b),s*Math.sin(b)*Math.sin(a)];};
-      for(let i=0;i<m;i++)for(let j=0;j<rows;j++)quad(p(i,j),p(i+1,j),p(i+1,j+1),p(i,j+1),'sphere:'+i);
-    }else if(name==='torus'){
-      const m=n*4,k=n*2,R=s*.68,r=s*.30;
-      const p=(i,j,rad=r)=>{const a=TAU*i/m,b=TAU*j/k;return [(R+rad*Math.cos(b))*Math.cos(a),rad*Math.sin(b),(R+rad*Math.cos(b))*Math.sin(a)];};
-      for(let i=0;i<m;i++)for(let j=0;j<k;j++){
-        const inner=q=>{const a=Math.atan2(q[2],q[0]),core=[R*Math.cos(a),0,R*Math.sin(a)];return add(core,mul(sub(q,core),.72));};
-        quad(p(i,j),p(i+1,j),p(i+1,j+1),p(i,j+1),'torus:'+i+':'+(Math.cos(TAU*(j+.5)/k)>=0?0:1),inner);
-      }
-    }else if(name==='cylinder'||name==='gear'){
-      const gear=name==='gear',m=gear?Math.max(8,n*2)*4:n*4;
-      const height=gear?s*.22:s, hole=gear?s*.26:0;
-      const radius=i=>gear?s*(i%4===1||i%4===2?1:.84):s;
-      const p=(i,r,y)=>[r*Math.cos(TAU*i/m),y,r*Math.sin(TAU*i/m)];
-      for(let i=0;i<m;i++){
-        const a=radius(i),b=radius((i+1)%m);
-        const sides=gear?2:n;
-        for(let j=0;j<sides;j++){
-          const y=-height+2*height*j/sides,z=-height+2*height*(j+1)/sides;
-          const inner=q=>{const r=Math.hypot(q[0],q[2]);return [q[0]*(1-s*.09/r),q[1],q[2]*(1-s*.09/r)];};
-          quad(p(i,a,y),p(i+1,b,y),p(i+1,b,z),p(i,a,z),'side:'+i,inner);
-          if(gear){const inward=q=>[q[0]*1.28,q[1],q[2]*1.28];quad(p(i,hole,y),p(i+1,hole,y),p(i+1,hole,z),p(i,hole,z),'hole:'+i,inward);}
-        }
-        for(const sign of [-1,1])for(let j=0;j<n;j++){
-          const r0=hole+(a-hole)*j/n,r1=hole+(a-hole)*(j+1)/n;
-          const t0=hole+(b-hole)*j/n,t1=hole+(b-hole)*(j+1)/n;
-          const points=[p(i,r0,sign*height),p(i+1,t0,sign*height),p(i+1,t1,sign*height),p(i,r1,sign*height)];
-          const column=Math.floor((points.reduce((sum,p)=>sum+p[0],0)/4+s)/(2*s)*n);
-          quad(...points,'cap:'+sign+':'+column,q=>[q[0],q[1]-sign*s*.09,q[2]]);
+        // A solid flat annular band, not a hollow tube or a round doughnut.
+        // Identical footprints at every height fill its rectangular section.
+        if(ring){const radius=Math.hypot(x,z);return radius>=s*.72&&radius<=s&&Math.abs(y)<=s*.13;}
+        throw new Error('Unknown challenge geometry: '+name);
+      };
+      const occupied=new Map();
+      for(let x=0;x<count;x++)for(let z=0;z<count;z++){
+        for(let y=0;y<count;y++){
+          const center=[x,y,z].map(i=>-extent+(i+.5)*step);
+          if(inside(...center)){
+            const c={center,poly,track:'',order:0};
+            cells.push(c);occupied.set([x,y,z].join(','),{c,grid:[x,y,z]});
+          }
         }
       }
-    }else throw new Error('Unknown challenge geometry: '+name);
-    const tracks=new Map();
-    cells.forEach(c=>{if(!tracks.has(c.track))tracks.set(c.track,[]);tracks.get(c.track).push(c);});
-    // The first slot is the downhill end. Horizontal surfaces drain toward +Z.
-    tracks.forEach(list=>list.sort((a,b)=>a.center[1]-b.center[1]||b.center[2]-a.center[2]).forEach((c,i)=>c.order=i));
+      // Each corner cube belongs to exactly one nearest surface, with a stable
+      // tie break. Interior depth layers remain separate; no duplicate skins.
+      const lanes=new Map();
+      for(const {c,grid} of occupied.values()){
+        let owner=null;
+        for(const axis of [0,1,2])for(const sign of [-1,1]){
+          let depth=0,p=grid.slice();p[axis]+=sign;
+          while(occupied.has(p.join(','))){depth++;p[axis]+=sign;}
+          if(!owner||depth<owner.depth)owner={axis,sign,depth};
+        }
+        const fallAxis=owner.axis===1?2:1;
+        const fixedAxis=[0,1,2].find(axis=>axis!==owner.axis&&axis!==fallAxis);
+        // Include the actual plane as well as depth: curved stair steps at the
+        // same depth can have different surface coordinates.
+        const key='face'+(owner.sign>0?'+':'-')+'xyz'[owner.axis]+':depth'+owner.depth+':plane'+grid[owner.axis]+':column'+grid[fixedAxis];
+        if(!lanes.has(key))lanes.set(key,[]);
+        lanes.get(key).push({c,position:grid[fallAxis],direction:fallAxis===2?-1:1});
+      }
+      for(const [key,lane] of lanes){
+        lane.sort((a,b)=>a.direction*(a.position-b.position));
+        let segment=0,order=0;
+        lane.forEach((entry,i)=>{
+          if(i&&Math.abs(entry.position-lane[i-1].position)!==1){segment++;order=0;}
+          entry.c.track=key+':segment'+segment;entry.c.order=order++;
+        });
+      }
+      return cells;
+    }
+    // One closed trapezoidal prism per radial/height slot. These pieces tile
+    // the complete toothed ring; caps and outer walls belong to the same solid.
+    const m=Math.max(8,n*2)*4,height=s*.22,hole=s*.26;
+    const radius=i=>s*(i%4===1||i%4===2?1:.84);
+    const point=(i,r,y)=>[r*Math.cos(TAU*i/m),y,r*Math.sin(TAU*i/m)];
+    for(let i=0;i<m;i++)for(let j=0;j<n;j++)for(let k=0;k<2;k++){
+      const a=radius(i),b=radius((i+1)%m);
+      const r0=hole+(a-hole)*j/n,r1=hole+(a-hole)*(j+1)/n;
+      const t0=hole+(b-hole)*j/n,t1=hole+(b-hole)*(j+1)/n;
+      const bottom=-height+k*height,top=bottom+height;
+      const vertices=[point(i,r0,bottom),point(i+1,t0,bottom),point(i+1,t1,bottom),point(i,r1,bottom),point(i,r0,top),point(i+1,t0,top),point(i+1,t1,top),point(i,r1,top)];
+      const center=mul(vertices.reduce(add,[0,0,0]),1/8);
+      const local=vertices.map(v=>sub(v,center));
+      cells.push({center,poly:{vertices:local,faces:hull(local)},track:'tooth:'+i+':'+j,order:k});
+    }
     return cells;
   }
   g.ChallengeGeometry={make,hull};
