@@ -65,7 +65,7 @@
       this.components.push(component);
       const G=root.ChallengeGeometry;
       for(const slot of G.make(name,{
-        size,resolution:[8,9,11].includes(this.level)?4:7,smooth:this.level<=8
+        size,resolution:[8,9,11].includes(this.level)?4:7,smooth:this.level>1&&this.level<=8
       })){
         const c=this._cell(add(position,mul(basis,slot.center)),slot.poly,id,{
           ...slot,...extra

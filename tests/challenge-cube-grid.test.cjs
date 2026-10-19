@@ -2,6 +2,22 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 require('../js/challenge-geometry.js');
 const absolute=c=>c.poly.vertices.map(p=>p.map((v,i)=>v+c.center[i]));
+
+test('challenge one uses only equal complete cubes, including its stepped boundary',()=>{
+ const World=require('../js/challenge-world.js'),w=new World(1,()=>.2);
+ assert.ok(w.cells.length>20);
+ for(const c of w.cells){
+  assert.ok(!c.clipped&&!c.poly.parts);
+  assert.equal(c.poly.vertices.length,8);assert.equal(c.poly.faces.length,6);
+  assert.ok(c.poly.faces.every(f=>f.length===4));
+  const widths=[0,1,2].map(i=>{const values=[...new Set(c.poly.vertices.map(v=>v[i]))];assert.equal(values.length,2);return Math.max(...values)-Math.min(...values);});
+  assert.ok(widths.every(v=>Math.abs(v-4/7)<1e-8));
+ }
+ const layers=new Map();for(const c of w.cells){const y=c.center[1].toFixed(6);layers.set(y,(layers.get(y)||0)+1);}
+ const sizes=[...layers].sort((a,b)=>Number(a[0])-Number(b[0])).map(v=>v[1]);
+ assert.ok(sizes.length>=5);assert.ok(sizes.every((n,i)=>i===0||n<=sizes[i-1]));
+ assert.ok(new World(2,()=>.2).cells.some(c=>c.clipped),'other levels retain their existing shapes');
+});
 test('main geometric challenges contain solid cube interiors and disjoint grid cells',()=>{
   for(const name of ['tetrahedron','cylinder','sphere','prism','frustum','torus','box']){
     const cells=ChallengeGeometry.make(name,{resolution:7});
