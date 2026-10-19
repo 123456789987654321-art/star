@@ -674,6 +674,7 @@
       const canPlay = () => this.state === 'play';
 
       cv.addEventListener('pointerdown', (e) => {
+        if(this.challenge?.marbleAim?.pointerDown(e)){cv.setPointerCapture(e.pointerId);return;}
         if(this.challenge?.thrower?.enabled()){
           pts.set(e.pointerId,{x:e.clientX,y:e.clientY});cv.setPointerCapture(e.pointerId);
           if(pts.size>=2){this.challenge.thrower.cancel();const a=[...pts.values()];pinch=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);dragging=true;return;}
@@ -693,6 +694,7 @@
       });
 
       cv.addEventListener('pointermove', (e) => {
+        if(this.challenge?.marbleAim?.pointerMove(e))return;
         if(pts.size<2&&this.challenge?.thrower?.pointerMove(e)){const p=pts.get(e.pointerId);if(p){p.x=e.clientX;p.y=e.clientY;}return;}
         if(this.challenge?.rubikControls?.pointerMove(e))return;
         if(this.challenge?.assembly?.pointerMove(e))return;
@@ -717,6 +719,7 @@
         lastX = e.clientX; lastY = e.clientY;
         moved += Math.abs(dx) + Math.abs(dy);
         if (moved > 7) {
+          this.challenge?.clearHintView();
           dragging = true;
           this.clearHover();
           if(!this.challenge?.pan(dx,dy))this.scene.rotateOrbit(dx, dy);
@@ -724,6 +727,7 @@
       });
 
       const endPointer = (e) => {
+        if(this.challenge?.marbleAim?.pointerUp(e))return;
         if(this.challenge?.thrower?.pointerUp(e)){pts.delete(e.pointerId);moved=0;dragging=false;pinch=0;return;}
         if(this.challenge?.rubikControls?.pointerUp(e)){pts.delete(e.pointerId);moved=0;dragging=false;pinch=0;return;}
         if(this.challenge?.assembly?.pointerUp(e)){pts.delete(e.pointerId);moved=0;dragging=false;pinch=0;return;}
@@ -735,7 +739,7 @@
         moved = 0; dragging = false; pinch = 0;
       };
       cv.addEventListener('pointerup', endPointer);
-      cv.addEventListener('pointercancel', (e) => { this.challenge?.rubikControls?.cancel();this.challenge?.assembly?.cancel();this.challenge?.thrower?.cancel();pts.delete(e.pointerId); pinch = 0; });
+      cv.addEventListener('pointercancel', (e) => { this.challenge?.marbleAim?.cancel();this.challenge?.rubikControls?.cancel();this.challenge?.assembly?.cancel();this.challenge?.thrower?.cancel();pts.delete(e.pointerId); pinch = 0; });
 
       cv.addEventListener('pointerleave', () => { if (this.state === 'play') this.clearHover(); });
 

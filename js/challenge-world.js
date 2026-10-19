@@ -832,8 +832,8 @@
     }
     _marbleBuild(){
       this.bounds=6.3;
-      const step=.65,width=.30,height=.32;
-      // Each upward wedge is two matching solids; open channels exceed a ball diameter.
+      const step=.65,width=.32,height=.44;
+      // Larger matching halves have a visible seam; staggered gaps preserve bounce routes.
       for(let y=0;y<14;y++)for(let x=0;x<8;x++){
        const middle=(x-3.5)*.59+(y%2?.10:-.10),bottom=4.25-y*step;
        const color=(Math.floor(this.rng()*6)+x+3*y)%6;
@@ -880,6 +880,18 @@
       const m=this.marble,basis=rotation('z',m.aimAngle);
       for(const part of m.launcher){part.center=add(m.launcherPivot,mul(basis,part.launcherLocal));part.basis=basis.slice();}
       if(!m.released){m.position=add(m.launcherPivot,mul(basis,[0,-.22,0]));for(const d of this.ballVisual)d.center=add(m.position,d.local);}
+    }
+    marblePreview(){
+      const m=this.marble;if(!m||m.released||m.drops>=m.totalDrops)return [];
+      // Run the same integrator on isolated state, stopping at the first impact.
+      const sim=Object.create(this);sim.marble={...m,position:m.position.slice(),velocity:[Math.sin(m.aimAngle)*3,-Math.cos(m.aimAngle)*3,0],contacts:new Set(),released:true};
+      sim.ballVisual=[];sim._marblePrepare=()=>{};
+      const path=[sim.marble.position.slice()],hits=m.collisionCount;
+      for(let i=0;i<800;i++){
+        sim._marbleUpdate(.006);path.push(sim.marble.position.slice());
+        if(sim.marble.collisionCount>hits||sim.marble.bin!==null||Math.abs(sim.marble.position[0])>=2.61)break;
+      }
+      return path;
     }
     _marbleUpdate(dt){
       const m=this.marble;if(!m.released||m.bin!==null)return;
@@ -964,7 +976,7 @@
       if(this.phase==='aim')return '拖住弹弓方块向后拉，调整方向与拉力，松手发射。左右靶各补5块；剩余 '+this.ammo.length+' 发';
       if(this.level===9)return this.gears.moving?'齿轮转动中，请等待停靠':'齿轮停靠，可跨接触面消除';
       if(this.level===11)return '左侧 '+this.seesaw.leftCount+' 块 · 右侧 '+this.seesaw.rightCount+' 块 · 分差不超过12保持平衡；当前消除 ×'+this.seesaw.multiplier;
-      if(this.level===12)return '长三角棋盘：只有共边的同色三角块可实体相连。共投放三颗随机颜色弹珠，每次撞击三角块加 100 分；落入得分框额外获得 100、300 或 500 分。三次结束达到 1500 分过关；弹珠下落时仍可消除障碍。';
+      if(this.level===12)return '每个尖头障碍由两个同色三角块组成，中间有清晰拼缝，点击即可配对消除；提示会定位并以白光跳动标出组合。按住顶部发射器左右拖动调整角度，白色箭头指向首次碰撞位置，力度固定，再点击发射弹珠。共三次，每次撞击加 100 分，落槽额外加 100、300 或 500 分，达到 1500 分过关；弹珠下落时仍可消除障碍。';
       return '消除相邻同色块；可旋转视角寻找可见接缝';
     }
   }

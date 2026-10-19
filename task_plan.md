@@ -68,3 +68,9 @@ Zoom correction complete:189 tests, all54 desktop/mobile maximum-zoom cases and 
 - Corrected sling depth, restricted seesaw camera to translation, and added pointed marble obstacles with aimable launcher.
 - Mapped the full zoom slider to its effective range; stabilized resting and sling cameras.
 - Final verification: 212/212 Node tests passed; real Edge desktop/mobile report errors=[] and failed=[]. Independent review completed. Publish to star/main authorized.
+
+## Marble aiming and visible hints revision
+- Clarified matching halves with visible seams and taller pointed obstacles; preserved open channels and collision scoring.
+- Direct mouse/touch launcher drag adjusts fixed-speed launch angle; isolated real physics generates white first-impact preview; button fires.
+- Challenge Hint centers and enlarges a removable group with white glow and bounce; repeated clicks preserve highlight and removal restores zoom.
+- Independent review completed and repeated-hint issue fixed. Final 214 tests pass; Edge desktop/touch report errors=[] and failed=[].

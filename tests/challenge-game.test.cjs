@@ -120,13 +120,25 @@ test('aim sliders preserve aim while paused or introducing and update during pla
   game.intro=0;panel.oninput(input);assert.equal(game.world.aim.x,2.5);
 });
 
-test('marble angle slider aims before launch and stays locked while paused or released',()=>{
- const {app,game,nodes}=integrated(12),panel=nodes.get('challengePanel'),m=game.world.marble;
- assert.match(nodes.get('challengeControls').innerHTML,/marbleAim/);assert.match(nodes.get('challengeControls').innerHTML,/发射弹珠/);
- const input={target:{id:'marbleAim',dataset:{},value:'30'}};
- panel.oninput(input);assert.ok(Math.abs(m.aimAngle-Math.PI/6)<1e-8);
- app.state='paused';input.target.value='-30';panel.oninput(input);assert.ok(m.aimAngle>0);
- app.state='play';game.action('release');panel.oninput(input);assert.ok(m.aimAngle>0);
+test('dragging the launcher aims at fixed speed without orbiting or firing on release',()=>{
+ const {app,game,nodes,scene}=integrated(12),m=game.world.marble;game.frame(.2);
+ assert.doesNotMatch(nodes.get('challengeControls').innerHTML,/type="range"/);
+ const p=scene.project(m.launcherPivot),e={clientX:p[0],clientY:p[1],pointerId:1,button:0};
+ assert.equal(game.marbleAim.pointerDown(e),true);assert.equal(game.marbleAim.pointerMove({...e,clientX:p[0]+40}),true);
+ assert.ok(m.aimAngle>0);assert.ok(game.marbleAim.path.length>2);
+ game.marbleAim.pointerUp(e);assert.equal(m.released,false);
+ const angle=m.aimAngle;app.state='paused';assert.equal(game.marbleAim.pointerDown(e),false);assert.equal(m.aimAngle,angle);
+ app.state='play';game.action('release');assert.ok(Math.abs(Math.hypot(...m.velocity)-3)<1e-9);assert.equal(game.marbleAim.pointerDown(e),false);
+});
+test('marble hint centers a real removable pair and preserves picking after the camera jump',()=>{
+ const {game,scene}=integrated(12);for(let i=0;i<20;i++)game.frame(.05);
+ game.hintGroup();assert.ok(game.hint.length>=2);assert.ok(game.hintFocus);
+ game.frame(.01);game.hintGroup();assert.ok(game.hint.length>=2,'repeated hint while camera settles keeps the highlight');
+ for(let i=0;i<20;i++)game.frame(.05);
+ const ids=game.hint.slice(),p=scene.project(game.hintFocus);assert.ok(Math.abs(p[0]-400)<1);assert.ok(Math.abs(p[1]-400)<1);
+ assert.ok(game.group(ids[0]).length>=2);
+ const cell=game.world.cells.find(c=>c.id===ids[0]),point=scene.project(cell.center),score=game.world.score;
+ game.click({clientX:point[0],clientY:point[1]});assert.ok(game.world.score>score);assert.equal(game.hintFocus,null);
 });
 test('App starts a real challenge, advances its frame and removes the clicked projected group',()=>{
   const {app,game,scene,ctx}=seamFixture();

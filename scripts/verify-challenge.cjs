@@ -92,7 +92,20 @@ const evaluate=async expression=>{const r=await call('Runtime.evaluate',{express
  results.push(await evaluate(`(()=>{qaEnter(4);const g=App.challenge,w=g.world;g.intro=0;const lower=w.tower.levels[4],person=w.tower.person;person.y=lower.originalY+.6;person.fallStart=person.y;person.supportId=lower.upperIds[103];w.remove(w.tower.levels[5].columnIds.flat());w.update(1.5);g.checkResult();return {towerCrushFailure:w.result==='lose'&&w.tower.failure==='crush',towerCrushPersonDead:!w.tower.person.alive};})()`));
  await delay(100);fs.writeFileSync(path.join(out,'tower-crush.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
  results.push(await evaluate(`(()=>{qaEnter(11);const g=App.challenge,sc=App.scene;g.intro=0;g.frame(.01);const beam=g.world.beam,ends=()=>[-3.5,3.5].map(x=>sc.project([beam.center[0]+x,beam.center[1],beam.center[2]]));const before=ends();g.pan(65,40);g.frame(.01);const after=ends();return {seesawNoPanel:document.getElementById('challengePanel').classList.contains('hidden'),seesawPanMoves:Math.abs(after[0][0]-before[0][0])>1,seesawStaysLevel:Math.abs(after[0][1]-after[1][1])<.01};})()`));
- results.push(await evaluate(`(()=>{qaEnter(12);const g=App.challenge;g.intro=0;g.controlsKey='';g.controls();const slider=document.getElementById('marbleAim');if(!slider)return {marbleAimControl:false};slider.value=30;slider.dispatchEvent(new Event('input',{bubbles:true}));g.world.action('release');return {marbleAimControl:true,marbleAngledLaunch:g.world.marble.velocity[0]>0};})()`));
+ for(const mobile of [false,true]){
+  await call('Emulation.setDeviceMetricsOverride',{width:mobile?390:1280,height:mobile?844:900,deviceScaleFactor:1,mobile});
+  await evaluate(`qaEnter(12);App.challenge.intro=0;`);await delay(400);
+  const p=await evaluate(`(()=>{const p=App.scene.project(App.challenge.world.marble.launcherPivot);return {x:p[0],y:p[1]};})()`),q={x:p.x+36,y:p.y};
+  if(mobile){await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[p]});await call('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[q]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});}
+  else{await call('Input.dispatchMouseEvent',{type:'mousePressed',...p,button:'left',clickCount:1});await call('Input.dispatchMouseEvent',{type:'mouseMoved',...q,buttons:1,button:'left'});await call('Input.dispatchMouseEvent',{type:'mouseReleased',...q,button:'left',clickCount:1});}
+  await delay(100);results.push(await evaluate(`({marbleDevice:"${mobile?'touch':'mouse'}",marbleDirectAim:App.challenge.world.marble.aimAngle>.1,marbleWhitePreview:App.challenge.marbleAim.path.length>2,marbleNoRange:!document.querySelector('#challengeControls input[type="range"]'),marbleWaitsForButton:!App.challenge.world.marble.released})`));
+  fs.writeFileSync(path.join(out,mobile?'marble-touch-aim.png':'marble-drag-aim.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+  await evaluate(`App.challenge.action('release');`);results.push(await evaluate(`({marbleAngledLaunch:App.challenge.world.marble.velocity[0]>0,marbleFixedSpeed:Math.abs(Math.hypot(...App.challenge.world.marble.velocity)-3)<.2})`));
+  await evaluate(`qaEnter(12);App.challenge.intro=0;`);await delay(400);await evaluate(`App.showHint();`);await delay(400);
+  results.push(await evaluate(`(()=>{const g=App.challenge,p=g.hintFocus&&App.scene.project(g.hintFocus);return {marbleHintPair:g.hint.length>=2,marbleHintCentered:!!p&&Math.abs(p[0]-innerWidth/2)<2&&Math.abs(p[1]-innerHeight/2)<2};})()`));
+  fs.writeFileSync(path.join(out,mobile?'marble-touch-hint.png':'marble-hint.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+ }
+ await call('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
  for(const level of [1,3,7,8,11,12])results.push(await evaluate(`(()=>{qaEnter(${level});const g=App.challenge;g.intro=0;const distances=[];for(const v of [0,.25,.5,.75,1]){App.setZoom(v);g.frame(.001);distances.push(App.scene.dist);}return {zoomLevel:${level},wholeSliderChanges:distances.every((d,i)=>i===0||d<distances[i-1]-.001)};})()`));
  if(process.env.ZOOM_QA){
   for(const [width,height] of [[1280,900],[390,844]]){

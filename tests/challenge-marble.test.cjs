@@ -1,6 +1,13 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 require('../js/challenge-geometry.js');const World=require('../js/challenge-world.js');
 const fresh=()=>new World(12,()=>.42);
+test('aim preview uses real collision physics without changing the live game',()=>{
+ const w=fresh();w.action('marble-aim',.35);const before=JSON.stringify([w.marble,w.score,w.cells,w.result]);
+ const path=w.marblePreview();assert.ok(path.length>2);assert.equal(JSON.stringify([w.marble,w.score,w.cells,w.result]),before);
+ w.action('release');let last=w.marble.position.slice();
+ for(let i=1;i<path.length;i++){w._marbleUpdate(.006);last=w.marble.position.slice();}
+ assert.deepEqual(last,path.at(-1));assert.ok(w.marble.collisionCount>0||w.marble.bin!==null||Math.abs(last[0])>2.6);
+});
 test('long marble board uses closed triangular solids and only shared edges connect',()=>{
  const w=fresh();assert.ok(w.cells.length>=200);assert.ok(w.cells.every(c=>c.poly.vertices.length===6));
  const ys=w.cells.map(c=>c.center[1]);assert.ok(Math.max(...ys)-Math.min(...ys)>8);

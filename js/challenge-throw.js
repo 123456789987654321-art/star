@@ -25,4 +25,36 @@
   cancel(){const consumed=this.charging;this.charging=false;this.pointerId=null;this.power=0;this.world.action('throw-aim',{pull:[0,0,0]});return consumed;}
  }
  g.ChallengeThrow=ChallengeThrow;
+ class ChallengeMarbleAim{
+  constructor(game){this.game=game;this.pointerId=null;this.path=[];}
+  enabled(){const g=this.game,m=g.world.marble;return g.app.state==='play'&&!g.intro&&!g.world.result&&!m.released&&m.drops<m.totalDrops;}
+  pointerDown(e){
+   if(!this.enabled()||this.pointerId!==null||(e.button!==undefined&&e.button!==0))return false;
+   const sc=this.game.app.scene,p=sc.project(this.game.world.marble.launcherPivot),rect=sc.canvas?.getBoundingClientRect?.();
+   if(!p||Math.hypot(e.clientX-(rect?.left||0)-p[0],e.clientY-(rect?.top||0)-p[1])>32)return false;
+   this.pointerId=e.pointerId;this.startX=e.clientX;this.startAngle=this.game.world.marble.aimAngle;this.updatePreview();return true;
+  }
+  pointerMove(e){
+   if(this.pointerId===null||e.pointerId!==this.pointerId)return false;
+   if(!this.enabled()){this.cancel();return true;}
+   this.game.world.action('marble-aim',this.startAngle+(e.clientX-this.startX)*Math.PI/240);this.updatePreview();return true;
+  }
+  pointerUp(e){if(this.pointerId===null||e.pointerId!==this.pointerId)return false;this.pointerId=null;return true;}
+  cancel(){this.pointerId=null;this.path=[];this.key='';}
+  updatePreview(){
+   const w=this.game.world,key=w.marble.aimAngle+'|'+w.cells.map(c=>c.color).join(',');
+   if(key!==this.key){this.key=key;this.path=w.marblePreview();}
+  }
+  render(){
+   if(!this.enabled()){this.cancel();return;}
+   if(!this.key)return;this.updatePreview();
+   const sc=this.game.app.scene,m4=g.MX.m4,I=[1,0,0,0,1,0,0,0,1],draw=(p,size)=>{const model=m4.create();m4.fromBasisScale(model,I,[p[0],p[1],.22],size);sc.drawBox(model,[1,1,1],[0,0],0,.95);};
+   for(let i=0;i<this.path.length;i+=4)draw(this.path[i],[.035,.035,.035]);
+   const end=this.path.at(-1),prev=this.path.at(-3);if(!end||!prev)return;
+   let dx=end[0]-prev[0],dy=end[1]-prev[1],len=Math.hypot(dx,dy)||1;dx/=len;dy/=len;
+   const model=m4.create();m4.fromBasisScale(model,I,[end[0],end[1],.23],[1,1,1]);
+   sc.drawPoly(model,{vertices:[[0,0,0],[-dx*.2-dy*.10,-dy*.2+dx*.10,0],[-dx*.2+dy*.10,-dy*.2-dx*.10,0]],faces:[[0,1,2],[2,1,0]]},[1,1,1],0,1,1);
+  }
+ }
+ g.ChallengeMarbleAim=ChallengeMarbleAim;
 })(typeof window!=='undefined'?window:globalThis);
