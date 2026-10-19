@@ -116,6 +116,28 @@
     const s=options.size===undefined?2:options.size;
     const n=Math.max(2,Math.min(16,Math.round(options.resolution||7)));
     const cells=[];
+    if(name==='tetrahedron'&&options.quadFaces){
+      // Divide the triangular base into three quadrilateral patches, then
+      // taper matching layers toward the apex. Side cuts follow the faces,
+      // so only the final tip layer needs triangular exterior faces.
+      const base=[[-s,-s,-.7*s],[s,-s,-.7*s],[0,-s,s]],tip=[0,s,0];
+      const mid=(a,b)=>mul(add(a,b),.5),centroid=mul(base.reduce(add,[0,0,0]),1/3);
+      const divisions=2;
+      for(let patch=0;patch<3;patch++){
+        const a=base[patch],b=mid(a,base[(patch+1)%3]),d=mid(a,base[(patch+2)%3]);
+        const point=(u,v)=>add(add(mul(a,(1-u)*(1-v)),mul(b,u*(1-v))),add(mul(centroid,u*v),mul(d,(1-u)*v)));
+        for(let u=0;u<divisions;u++)for(let v=0;v<divisions;v++){
+          const quad=[[u,v],[u+1,v],[u+1,v+1],[u,v+1]].map(([x,z])=>point(x/divisions,z/divisions));
+          for(let row=0;row<n;row++){
+            const vertices=[row,row+1].flatMap(layer=>quad.map(p=>add(mul(p,1-layer/n),mul(tip,layer/n))))
+              .filter((p,i,all)=>!all.slice(0,i).some(q=>Math.hypot(...sub(p,q))<1e-9));
+            const center=mul(vertices.reduce(add,[0,0,0]),1/vertices.length),local=vertices.map(p=>sub(p,center));
+            cells.push({center,poly:{vertices:local,faces:hull(local)},track:'tetra:'+patch+':'+u+':'+v,order:row});
+          }
+        }
+      }
+      return cells;
+    }
     // Solid grid pieces share only complete square faces. No independent cap
     // skin overlaps the side wall, and no radial fan is needed at the poles.
     if(name!=='gear'){

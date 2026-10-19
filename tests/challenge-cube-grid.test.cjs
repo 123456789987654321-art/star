@@ -3,19 +3,20 @@ const assert=require('node:assert/strict');
 require('../js/challenge-geometry.js');
 const absolute=c=>c.poly.vertices.map(p=>p.map((v,i)=>v+c.center[i]));
 
-test('challenge one uses only equal complete cubes, including its stepped boundary',()=>{
+test('challenge one has flat tetrahedron faces with quadrilateral tiles except at the tip',()=>{
  const World=require('../js/challenge-world.js'),w=new World(1,()=>.2);
  assert.ok(w.cells.length>20);
- for(const c of w.cells){
-  assert.ok(!c.clipped&&!c.poly.parts);
-  assert.equal(c.poly.vertices.length,8);assert.equal(c.poly.faces.length,6);
-  assert.ok(c.poly.faces.every(f=>f.length===4));
-  const widths=[0,1,2].map(i=>{const values=[...new Set(c.poly.vertices.map(v=>v[i]))];assert.equal(values.length,2);return Math.max(...values)-Math.min(...values);});
-  assert.ok(widths.every(v=>Math.abs(v-4/7)<1e-8));
+ const planes=[[[0,-1,0],2],[[0,.35,-1],.7],[[1,.5/1.7,1/1.7],1/1.7],[[-1,.5/1.7,1/1.7],1/1.7]];
+ let quads=0,triangles=0;
+ for(const c of w.cells){const points=absolute(c);
+  assert.ok(c.volume>0);
+  assert.ok(points.every(p=>planes.every(([n,d])=>n.reduce((sum,v,i)=>sum+v*p[i],0)<=d+1e-8)));
+  for(const f of c.poly.faces){const face=f.map(i=>points[i]);if(!planes.some(([n,d])=>face.every(p=>Math.abs(n.reduce((sum,v,i)=>sum+v*p[i],0)-d)<1e-8)))continue;
+   if(f.length===4)quads++;else{triangles++;assert.equal(f.length,3);assert.ok(face.some(p=>Math.abs(p[1]-2)<1e-8),'triangles only touch apex');}
+  }
  }
- const layers=new Map();for(const c of w.cells){const y=c.center[1].toFixed(6);layers.set(y,(layers.get(y)||0)+1);}
- const sizes=[...layers].sort((a,b)=>Number(a[0])-Number(b[0])).map(v=>v[1]);
- assert.ok(sizes.length>=5);assert.ok(sizes.every((n,i)=>i===0||n<=sizes[i-1]));
+ assert.ok(quads>triangles*5);assert.ok(triangles>0);
+ assert.ok(Math.abs(w.cells.reduce((sum,c)=>sum+c.volume,0)-1.7*16/3)<1e-7,'no missing volume');
  assert.ok(new World(2,()=>.2).cells.some(c=>c.clipped),'other levels retain their existing shapes');
 });
 test('main geometric challenges contain solid cube interiors and disjoint grid cells',()=>{
