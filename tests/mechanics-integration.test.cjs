@@ -178,6 +178,7 @@ test('normal campaign stops at 15 and keeps completed levels replayable',()=>{
 
 test('mechanic introduction only appears in normal 5x5 levels 2 and 3 and pauses until dismissed',()=>{
   const {a,ctx}=fixture();ctx.performance={now:()=>0};let html='';a.overlay=s=>html=s;
+  a.board.color[0]=a.board.color[a.board.neighbors(0)[0]]=0;
   a.mode='normal';
   for(let level=1;level<=15;level++) {a.level=level;assert.equal(a.hasMechanicIntro(),level===2||level===3);}
   a.level=2;a.state='intro';a.introLeft=0;a.introDone=false;

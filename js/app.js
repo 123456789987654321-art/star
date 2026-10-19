@@ -184,19 +184,22 @@
     },
     hasPotentialMoves() {
       if (this.board.hasMoves()) return true;
-      const colors=new Set();
-      for(const color of (this.rotor&&this.rotor.projected?this.board.color:[]))if(color>=0) {
-        if(colors.has(color))return true; // A future view can join separated same-color blocks.
-        colors.add(color);
-      }
       if (this.rotor && this.rotor.projected) {
+        const matches = (a, b) => a >= 0 && b >= 0 && (a === b || a === 6 || b === 6);
+        const colors = [];
+        for (let id = 0; id < this.board.size; id++) {
+          const color = this.board.color[id];
+          if (color < 0 || this.board.covered[id]) continue;
+          if (colors.some(other => matches(color, other))) return true;
+          colors.push(color);
+        }
         for(let i=0;i<this.rotor.colors.length;i++) {
           const color=this.rotor.colors[i];
           if(color<0)continue;
-          if(this.rotor.neighbors(i).some(j=>this.rotor.colors[j]===color))return true;
-          // Matching colors may be joined by a future view, even if currently apart.
-          if(this.board.color.includes(color))return true;
-          if(this.rotor.colors.some((c,j)=>Math.floor(j/6)!==Math.floor(i/6)&&c===color))return true;
+          if(this.groupAt(this.board.size+i).length>=2)return true;
+          // Eligible body blocks and different panels may join in a future view.
+          if(colors.some(other=>matches(color,other)))return true;
+          if(this.rotor.colors.some((c,j)=>Math.floor(j/6)!==Math.floor(i/6)&&matches(color,c)))return true;
         }
         return false;
       }
@@ -382,7 +385,8 @@
           this.introDone = true;
           this.state = 'play';
           this.updateHud();
-          this.showMechanicIntro();
+          if ((this.mode === 'normal' || this.mode === 'test') && !this.hasPotentialMoves()) this.levelClear();
+          else this.showMechanicIntro();
         }
       }
       if (this.landSfxCd > 0) this.landSfxCd -= dt;
@@ -893,15 +897,21 @@
       if (!this.hasPotentialMoves()) this.levelClear();
     },
 
+    remainingBonus(remain) {
+      return remain === 0 ? 2000 : Math.max(0, (13 - remain) * 100);
+    },
+
+    leftoverDelay(remain, index) {
+      return remain <= 13 ? index * 0.12 : 0;
+    },
+
     levelClear() {
+      if (this.state === 'clear' || this.state === 'over') return;
       this.clearHint();
       this.state = 'clear';
       this.clearHover();
       const remain = this.remainingCount();
-      // 传统公式 (2000 - 20r²) 在 6 色下永远是 0（一局结束平均只剩 1/3 的孤块），
-      // 这里改成按「剩余占比」给奖励：全清满额，剩到一半就是 0。
-      const ratio = remain / this.tilesAll;
-      const bonus = Math.max(0, Math.round(2200 * (1 - ratio / 0.5) * (this.tilesAll / 150) / 10) * 10);
+      const bonus = this.remainingBonus(remain);
       this.score += bonus;
       this.recordClear();
       this.trackBest();
@@ -914,7 +924,7 @@
       leftovers.forEach((tile, i) => {
         tile.anim = {
           type: 'pop', firework: true, exploded: false,
-          t: 0, delay: i / Math.max(1, leftovers.length) * 0.65, dur: 1.05,
+          t: 0, delay: this.leftoverDelay(remain, i), dur: 1.05,
           from: tile.center.slice(),
           vel: v3.mul(v3.norm(v3.add(tile.center, [0, 0.8, 0])), 4.2),
           spinAxis: tile.spinAxis, spin0: 5 + Math.random() * 4,
@@ -933,7 +943,8 @@
         );
       }
       this.updateHud();
-      this.timer = { t: 2.5, fn: () => this.showClearPanel() };
+      const lastDelay = this.leftoverDelay(remain, Math.max(0, leftovers.length - 1));
+      this.timer = { t: Math.max(2.5, lastDelay + 1.6), fn: () => this.showClearPanel() };
     },
 
     showClearPanel() {
@@ -1217,7 +1228,7 @@
         } else if (act === 'retry') this.restart();
         else if (act === 'menu') this.toMenu();
         else if (act === 'resume') this.resume();
-        else if (act === 'challengeFinish' && this.challenge) { this.resume();this.challenge.world.finish();this.challenge.checkResult(); }
+        else if (act === 'challengeFinish' && this.challenge) { this.resume();this.challenge.action('finish'); }
         else if (act === 'helpClose') this.hideOverlay();
         else if (act === 'dialogBack') this.backFromHelp();
         else if (act === 'restart') this.restart();

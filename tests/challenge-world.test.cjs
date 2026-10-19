@@ -18,6 +18,9 @@ test('solid adjacency rejects diagonal edge contact but accepts a shared face',(
   assert.ok(!w.contacts().some(([a,b])=>a===0&&b===1),'marble blocks also require face contact');
 });
 test('all twelve worlds start independent and expose real cells',()=>{for(let n=1;n<=12;n++){const w=world(n);assert.equal(w.score,0);assert.equal(w.result,null);assert.ok(w.cells.length>10);assert.equal(new Set(w.cells.map(c=>c.id)).size,w.cells.length);}});
+test('challenge remainder reward matches every requested count and awards once',()=>{
+ for(let remain=0;remain<=15;remain++){const w=world(1);w.cells.forEach((c,i)=>c.color=i<remain?0:-1);w.score=25;w.finish();const bonus=remain===0?2000:remain<=13?(13-remain)*100:0;assert.equal(w.score,25+bonus);w.finish();assert.equal(w.score,25+bonus);}
+});
 
 test('every challenge rejects vertex-only physical contact, including clipped blocks',()=>{
  const poly={vertices:[[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,1],[1,0,1],[1,1,1],[0,1,1]],faces:[[0,3,2,1],[4,5,6,7],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7]]};

@@ -958,16 +958,22 @@
       if(this.level===11)this._seesawUpdate(dt);
       if(this.level===12)this._marbleUpdate(dt);
     }
-    finish(){
+    awardRemainder(){
+      if(this.remainderAwarded)return this.levelScoreBonus;
+      this.remainderAwarded=true;this.levelRemain=this.remaining();
+      this.levelScoreBonus=this.levelRemain===0?2000:this.levelRemain<=13?(13-this.levelRemain)*100:0;
+      this.score+=this.levelScoreBonus;return this.levelScoreBonus;
+    }
+    finish(reason){
       if(this.result)return this.result;
       if(this.rubik&&this.rubik.turn)return null;
       if(this.phase==='assemble'||this.phase==='aim')return null;
-      if(this.level===4)return null;
+      if(this.level===4&&reason!=='no-moves')return null;
       if(this.level===12){
         if(this.marble.drops<this.marble.totalDrops)return null;
         this.result=this.score>=this.target?'win':'lose';this.phase='finished';return this.result;
       }
-      this.score+=Math.max(0,1000-this.remaining()*20);
+      this.awardRemainder();
       this.result='win';
       this.phase='finished';
       return this.result;

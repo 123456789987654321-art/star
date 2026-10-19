@@ -36,7 +36,6 @@
       g.Sfx.start();this.help(true);
     }
     dispose(){
-      this.saveBest();
       this.rubikControls?.dispose();
       $('challengePanel')?.classList.add('hidden');document.body.classList.remove('in-challenge');
       $('waterGauge')?.classList.add('hidden');
@@ -89,6 +88,16 @@
     }
     frame(dt){
       const app=this.app,sc=app.scene;
+      if(this.ending&&app.state==='settling'){
+        this.ending.time+=dt;this.elapsed+=dt;
+        for(const item of this.ending.items)if(!item.popped&&this.ending.time>=item.delay){
+          item.popped=true;this.endHidden.add(item.tile.id);
+          sc.particles.burst(item.tile.center,COLORS[item.tile.color],18,{speed:2.4,size:.065,life:.6,gravity:2});
+          this.popEffects.push({tile:item.tile,time:0});
+        }
+        this.popEffects=this.popEffects.filter(p=>(p.time+=dt)<.32);sc.particles.update(dt);
+        if(this.ending.time>=this.ending.duration)this.checkResult();
+      }
       this.thrower?.frame(dt);
       if(app.state==='play'){
         this.elapsed+=dt;this.intro=Math.max(0,this.intro-dt);
@@ -108,17 +117,15 @@
         const cameraKey=Array.from(sc.vp).map(n=>Math.abs(n)<.00005?'0.0000':n.toFixed(4)).join(',');
         this.cameraQuiet=cameraKey===this.cameraKey?(this.cameraQuiet||0)+dt:0;this.cameraKey=cameraKey;
         const key=cameraKey+'|'+this.world.cells.map(c=>c.color+':'+c.center.map(n=>n.toFixed(3)).join(',')+':'+(c.basis||IDENTITY).map(n=>n.toFixed(3)).join(',')).join(';');
+        const geometryKey=key.slice(cameraKey.length)+(this.world.tower?':'+this.world.tower.person.y.toFixed(4):'');
+        this.geometryQuiet=geometryKey===this.geometryKey?(this.geometryQuiet||0)+dt:0;this.geometryKey=geometryKey;
         if(key!==this.pendingProjection){this.pendingProjection=key;this.linkTime=0;this.viewLinks=[];this.hover=[];if(!this.hintFocus)this.hint=[];app.hideTip();}
         else this.linkTime+=dt;
         if(this.slides.size||this.world.rubik?.turn){this.viewLinks=[];this.lastProjection='';this.linkTime=0;}
         if(this.world.canRemove()&&!this.slides.size&&this.linkTime>.12&&key!==this.lastProjection){
           this.viewLinks=g.ChallengeProjection.links(sc,this.interactionTiles());this.lastProjection=key;
         }
-        if(![4,12].includes(this.level)&&!this.world.rubik?.turn&&this.world.canRemove()&&!this.slides.size){
-          const colors=new Set();let possible=false;
-          for(const c of this.world.cells){if(c.color<0||c.color>5)continue;if(colors.has(c.color)){possible=true;break;}colors.add(c.color);}
-          if(!possible)this.world.finish();
-        }
+        if(this.level!==12&&this.geometryQuiet>.6&&this.cameraQuiet>.3&&!this.hintFocus&&!this.hasPotentialMoves())this.world.finish('no-moves');
         this.checkResult();
       }
       this.syncHud();
@@ -151,7 +158,7 @@
       else sc.constrainZoom?.(this.world.cells.concat(this.world.decorations||[]),this.level===11?sc.target:this.focus||[0,0,0],bottom);
       if(sc.zoomRange)$('zoomSlider')?.setAttribute('aria-valuetext',Math.round(100*sc.zoomRange.far/sc.dist)+'%');
       sc.beginFrame();
-      this.tiles=this.world.cells.filter(c=>c.color>=0).map(c=>this.makeTile(c));
+      this.tiles=this.world.cells.filter(c=>c.color>=0&&!this.endHidden?.has(c.id)).map(c=>this.makeTile(c));
       const decor=(this.world.decorations||[]).map(c=>this.makeTile(c,true));
       this.drawList=this.tiles.concat(decor);
       const draw=t=>{
@@ -262,14 +269,28 @@
     action(name,value){
       if(this.app.state!=='play'||this.intro||this.world.rubik?.turn||(name==='turn'&&this.slides.size))return;
       this.clearHintView();
-      if(name==='finish'){this.world.finish();}
+      if(name==='finish'){if(this.geometryQuiet<.6||this.hasPotentialMoves())return;this.world.finish('no-moves');}
       else if(name==='retry'){this.app.restart();return;}
       else {const result=this.world.action(name,value);if(typeof result==='string'){this.message=result;this.messageUntil=this.elapsed+2;this.app.toast(this.focus,result);}}
       this.assembly?.afterAction(name);
       if(this.level===8&&['add','remove-component','reset','undo','translate','rotate','snap','complete'].includes(name))this.refit();
       this.hover=[];this.hint=[];this.lastProjection='';this.controlsKey='';this.readMoves();this.controls();this.syncHud();this.checkResult();
     }
+    hasPotentialMoves(){
+      const w=this.world;
+      if(!w.canRemove()||this.slides.size||w.rubik?.turn||w.projectile)return true;
+      const cells=w.cells.filter(c=>c.color>=0&&c.color<6&&!c.immutable),colors=new Set();let duplicate=false;
+      for(const c of cells){if(colors.has(c.color))duplicate=true;colors.add(c.color);}
+      if(!duplicate)return false;
+      // Rotation and mechanism controls can still bring like colors together.
+      // A fixed-view seesaw has no such rotation: test its settled contacts instead.
+      if(!w.seesaw)return true;
+      if(this.geometryQuiet<.6||w.seesaw.moving)return true;
+      const eligible=new Map(cells.map(c=>[c.id,c]));
+      return w.contacts().concat(this.viewLinks).some(([a,b])=>eligible.has(a)&&eligible.has(b)&&eligible.get(a).color===eligible.get(b).color);
+    }
     saveBest(){
+      if(!this.resultShown||this.world.result!=='win')return;
       const score=this.world.score;if(!Number.isFinite(score)||score<=0)return;
       const p=this.app.progressFor('challenge');p.best=p.best||{};
       if(score<=(Number(p.best[this.level])||0))return;
@@ -278,6 +299,15 @@
     }
     checkResult(){
       if(this.resultShown||!this.world.result)return;
+      if(!this.ending){
+        if(this.world.result==='win')this.world.awardRemainder();
+        this.clearHintView();this.endHidden=new Set();
+        const tiles=this.world.cells.filter(c=>c.color>=0&&c.color<6).map(c=>this.makeTile(c));
+        const items=tiles.map((tile,i)=>({tile,delay:tiles.length<=13?i*.12:0,popped:false}));
+        this.ending={time:0,items,duration:this.app.reduceMotion?0:(tiles.length<=13?Math.max(0,tiles.length-1)*.12:0)+.65};
+        if(this.ending.duration){this.app.state='settling';return;}
+      }
+      if(this.ending.time<this.ending.duration)return;
       this.resultShown=true;const won=this.world.result==='win';this.app.state=won?'clear':'over';
       this.app.score=this.world.score;this.app.target=this.world.target;this.app.hideTip();
       this.saveBest();
@@ -296,7 +326,7 @@
       this.app.state='paused';
       const viewHelp=this.level===11?'拖动可左右、上下平移视角，正面方向固定；滚轮、双指或左侧滑杆缩放。横梁的倾斜表示真实的失衡。':'拖动旋转，滚轮或左侧滑杆缩放。视角拼接始终开启，也可转动视角让可见边缘相接。';
       const rubikHelp=this.level===8?'白色箭头转动正对你的面上的行或列；拖动魔方查看其他面的箭头。金色箭头表示重力方向。':'';
-      this.app.overlay(`<h2 class="ov-title">${NAMES[this.level-1]}</h2><div class="ov-help"><p>${escape(this.world.info())}</p><p>${viewHelp}${rubikHelp}至少两个同色块共面接触时可消除，只碰角或棱不算实体相邻。</p><p>不限时，每关从 0 分开始。点击“！”可重新查看说明，说明打开期间场景暂停。</p></div><div class="ov-actions"><button class="ov-btn" data-act="resume">我知道了</button>${!entry&&this.world.phase==='play'&&![4,12].includes(this.level)?'<button class="ov-btn plain" data-act="challengeFinish">结算本关</button>':''}</div>`);
+      this.app.overlay(`<h2 class="ov-title">${NAMES[this.level-1]}</h2><div class="ov-help"><p>${escape(this.world.info())}</p><p>${viewHelp}${rubikHelp}至少两个同色块共面接触时可消除，只碰角或棱不算实体相邻。</p><p>不限时，每关从0分开始；完成本关后保存最高分，中途退出不保存。无后续配对机会时自动结算：剩13块奖励0分，12至1块奖励100至1200分，清空奖励2000分。</p><p>点击“！”可重新查看说明，说明打开期间场景暂停。</p></div><div class="ov-actions"><button class="ov-btn" data-act="resume">我知道了</button></div>`);
     }
     bindControls(){
       const panel=$('challengePanel');
@@ -329,7 +359,6 @@
       this.hasControls=Boolean(html);$('challengePanel').classList.toggle('hidden',!this.hasControls);
     }
     syncHud(){
-      this.saveBest();
       const w=this.world,a=this.app;a.score=w.score;a.target=w.target;
       $('hudMode').textContent='挑战 · '+NAMES[this.level-1];$('hudLevel').textContent=this.level;
       $('hudScore').textContent=w.score;$('hudTarget').textContent='';$('hudRemain').textContent=w.phase==='assemble'?w.cells.length:w.remaining();

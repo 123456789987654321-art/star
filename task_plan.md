@@ -90,3 +90,9 @@ Zoom correction complete:189 tests, all54 desktop/mobile maximum-zoom cases and 
 - Removed target score gates and challenge target/progress/star displays; result panels show earned score only.
 - Every attempt updates per-level highest score, including unfinished exits, retries and scene failures; picker retains max-only record.
 - Rescue scene hazards and normal-mode targets preserved.216 tests pass; browser errors=[]/failed=[]; independent review found no functional issues.
+
+## Completed-run records and shared remainder rewards
+- Supersedes intermediate-record behavior above: only completed challenge wins update best, after ending animation. Exit, retry, failure and interrupted settlement do not save a new record.
+- Shared exact reward: zero remaining=2000; 1..12=(13-n)*100; >=13=0. At most13 explode sequentially, larger remainders simultaneously, without extra matching score.
+- Audited all15 normal and11 challenge profiles. Wait for physics and retain future camera/mechanism opportunities, as confirmed by user. Free-camera matching-color checks intentionally remain conservative.
+- Browser regression passed with errors=[] and failed=[]; independent review found no confirmed major issue.

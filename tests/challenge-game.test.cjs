@@ -140,8 +140,26 @@ test('App starts a real challenge, advances its frame and removes the clicked pr
 test('an emptied challenge automatically settles after its last move',()=>{
   const {app,game}=integrated(1);
   game.world.remove(game.world.cells.map(c=>c.id));
-  game.frame(.05);
+  for(let i=0;i<30;i++)game.frame(.05);
   assert.equal(game.world.result,'win');assert.equal(app.state,'clear');
+});
+test('all eleven challenge profiles settle after physics with no eligible pair',()=>{
+ for(let level=1;level<=11;level++){
+  const {game,app}=integrated(level);const w=game.world;
+  w.cells.forEach(c=>c.color=-1);w.phase='play';w.update=()=>{};if(w.gears)w.gears.moving=false;
+  for(let i=0;i<30;i++)game.frame(.05);
+  assert.equal(w.result,'win','level '+level);assert.equal(app.state,'clear');assert.equal(w.levelScoreBonus,2000);
+ }
+});
+test('future-view and mechanism pairs stay playable; stationary seesaw dead pairs settle',()=>{
+ for(const level of [1,8,9,10,11]){
+  const {game}=integrated(level),w=game.world;w.phase='play';w.cells.forEach(c=>c.color=-1);
+  const a=w.cells[0],b=level===11?w.cells.find(c=>c.side==='right'):w.cells.at(-1);a.color=b.color=0;
+  game.geometryQuiet=1;game.viewLinks=[];if(w.gears)w.gears.moving=false;
+  assert.equal(game.hasPotentialMoves(),level!==11,'level '+level);
+  a.immutable=true;assert.equal(game.hasPotentialMoves(),false,'immutable does not form a move');
+ }
+ const {game}=integrated(10);assert.equal(game.hasPotentialMoves(),true,'shooting phase must finish first');
 });
 
 test('Rubik scene has no tray and turn completion starts falling animations before input unlocks',()=>{
@@ -207,7 +225,7 @@ test('Rubik body blocks rear picking and projected matches through a front hole'
 });
 
 
-test('challenge picker retains highest score including failed attempts and every replay starts at zero',()=>{
+test('challenge picker saves only completed high scores, not failed attempts',()=>{
   const {app,game,nodes}=integrated(10);
   const normal=JSON.stringify(app.progressFor('normal'));
   game.world.score=480;game.world.result='win';game.checkResult();
@@ -217,17 +235,36 @@ test('challenge picker retains highest score including failed attempts and every
   assert.equal(app.progressFor('challenge').best[10],480);
   app.restart();assert.equal(app.score,0);assert.equal(app.challenge.world.score,0);
   app.challenge.world.score=900;app.challenge.world.result='lose';app.challenge.checkResult();
-  assert.equal(app.progressFor('challenge').best[10],900);
+  assert.equal(app.progressFor('challenge').best[10],480);
   app.restart();app.challenge.world.score=600;app.challenge.world.result='win';app.challenge.checkResult();
-  assert.equal(app.progressFor('challenge').best[10],900);
+  assert.equal(app.progressFor('challenge').best[10],600);
   assert.equal(app.progressFor('challenge').score,0);assert.equal(app.progressFor('challenge').cleared[10],0);
   assert.equal(JSON.stringify(app.progressFor('normal')),normal);
 });
-test('challenge can end below the old target and keeps an unfinished high score',()=>{
+test('leaving during the completion animation discards the new record',()=>{
+ const {app,game}=integrated(1);app.reduceMotion=false;
+ game.world.score=12345;game.world.finish();game.checkResult();
+ assert.equal(app.state,'settling');game.frame(.1);
+ app.returnToLevelSelect();assert.equal(app.progressFor('challenge').best[1],undefined);
+ app.startSelectedLevel('challenge',1);assert.equal(app.challenge.world.score,0);
+});
+
+test('challenge exit and restart discard unfinished high scores',()=>{
  const {app,game,nodes}=integrated(1);game.world.score=20;game.syncHud();app.returnToLevelSelect();
- assert.equal(app.progressFor('challenge').best[1],20);assert.match(nodes.get('ovCard').innerHTML,/历史最高分：20/);
+ assert.equal(app.progressFor('challenge').best[1],undefined);assert.match(nodes.get('ovCard').innerHTML,/历史最高分：0/);
  app.startSelectedLevel('challenge',1);app.resume();app.challenge.world.finish();app.challenge.checkResult();
  assert.equal(app.challenge.world.result,'win');assert.doesNotMatch(nodes.get('ovCard').innerHTML,/本关目标|分数不足/);
+});
+test('challenge bursts sequentially up to thirteen and saves only after animation completion',()=>{
+ for(const remain of [0,1,2,12,13,14]){
+  const {app,game}=integrated(1);app.reduceMotion=false;game.intro=0;
+  game.world.cells.forEach((c,i)=>c.color=i<remain?i%6:-1);game.world.score=10;
+  game.world.finish();game.checkResult();assert.equal(app.state,'settling');assert.equal(app.progressFor('challenge').best[1],undefined);
+  assert.equal(new Set(game.ending.items.map(i=>i.delay)).size,remain>13?1:remain);
+  const expected=remain===0?2000:remain<=13?(13-remain)*100:0;
+  assert.equal(game.world.score,10+expected);game.frame(3);assert.equal(app.progressFor('challenge').best[1],10+expected);
+  game.world.finish();game.checkResult();assert.equal(game.world.score,10+expected);
+ }
 });
 
 test('help return closes menu help and resumes gameplay without choosing a level',()=>{

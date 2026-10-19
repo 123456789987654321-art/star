@@ -121,6 +121,7 @@ test('unmatchable leftovers explode into fireworks without granting elimination 
   App.board = b;
   App.spawnTilesInstant();
   App.score = 100;
+  App.state = 'play';
   App.dying = [];
   App.trackBest = App.updateHud = App.clearHover = () => {};
   context.Sfx = { levelClear() {} };
@@ -138,3 +139,149 @@ test('unmatchable leftovers explode into fireworks without granting elimination 
   assert.equal(App.score, 100 + App.levelScoreBonus);
   assert.ok(App.timer.t >= 2, 'settlement waits for the fireworks');
 });
+
+function prepareEnding(remain) {
+  App.board = new Board(5);
+  for (let id = 0; id < remain; id++) App.board.color[id] = id % 6;
+  App.rotor = null;
+  App.mode = 'normal';
+  App.state = 'play';
+  App.tilesAll = App.board.size;
+  App.spawnTilesInstant();
+  App.score = 500;
+  App.dying = [];
+  App.trackBest = App.updateHud = App.clearHover = () => {};
+  context.Sfx = { levelClear() {} };
+  const bursts = [];
+  App.scene = { addShake() {}, particles: { spawn() {}, burst: (...args) => bursts.push(args) } };
+  return bursts;
+}
+
+function preparePerspectiveMoves() {
+  App.board = new Board(5);
+  App.rotor = new context.PerspectivePanel(App.board);
+  App.rotor.colors.fill(-1);
+  App.viewLinks = [];
+}
+
+test('covered same-color blocks cannot keep a perspective level alive', () => {
+  preparePerspectiveMoves();
+  App.board.color[0] = App.board.color[App.board.size - 1] = 2;
+  App.board.covered[0] = 1;
+  assert.equal(App.hasPotentialMoves(), false);
+  App.board.color[App.board.size - 1] = -1;
+  App.rotor.colors[0] = 2;
+  assert.equal(App.hasPotentialMoves(), false);
+});
+
+test('eligible wildcard pairs keep a perspective level alive across future seams', () => {
+  preparePerspectiveMoves();
+  App.board.color[0] = 6;
+  App.board.color[App.board.size - 1] = 2;
+  assert.equal(App.board.hasMoves(), false);
+  assert.equal(App.hasPotentialMoves(), true);
+  App.board.color[App.board.size - 1] = -1;
+  App.rotor.colors[0] = 2;
+  assert.equal(App.hasPotentialMoves(), true);
+  App.board.color[0] = -1;
+  App.rotor.colors[1] = 6;
+  assert.equal(App.hasPotentialMoves(), true);
+});
+
+test('same-panel nonneighbors need a legal visible seam even with a wildcard', () => {
+  preparePerspectiveMoves();
+  App.rotor.colors[0] = 6;
+  const other = Array.from(App.rotor.colors.keys()).find(i => i !== 0 && !App.rotor.neighbors(0).includes(i));
+  App.rotor.colors[other] = 2;
+  assert.equal(App.hasPotentialMoves(), false);
+  App.rotor.links = [[App.board.size, App.board.size + other]];
+  assert.equal(App.hasPotentialMoves(), true);
+});
+
+for (let level = 1; level <= 15; level++) {
+  test(`normal level ${level} ends with no compatible eligible colors`, () => {
+    const profile = context.LevelProfile(level, 'normal');
+    App.board = new Board(profile.size);
+    const Panel = profile.kind === 'rotor' ? context.Rotor : profile.kind === 'perspective' ? context.PerspectivePanel : null;
+    App.rotor = Panel ? new Panel(App.board, () => 0, profile.size - 4) : null;
+    App.viewLinks = [];
+    App.board.color[0] = 0;
+    App.board.color[App.board.size - 1] = 1;
+    if (App.rotor) { App.rotor.colors.fill(-1); App.rotor.colors[0] = 2; }
+    assert.equal(App.hasPotentialMoves(), false);
+  });
+}
+
+for (const mode of ['normal', 'test']) {
+  test(`${mode} intro settles a no-move board only after the entry animation completes`, () => {
+    prepareEnding(1);
+    App.mode = mode;
+    App.state = 'intro';
+    App.introDone = false;
+    App.introLeft = 0.1;
+    App.timer = null;
+    const originalIntro = App.showMechanicIntro;
+    App.showMechanicIntro = () => {};
+    try {
+      App.updateTimers(0.05);
+      assert.equal(App.state, 'intro');
+      assert.equal(App.score, 500);
+      App.updateTimers(0.06);
+      assert.equal(App.state, 'clear');
+      assert.equal(App.score, 1700);
+      assert.equal(App.levelRemain, 1);
+    } finally { App.showMechanicIntro = originalIntro; }
+  });
+}
+
+test('legacy challenge finish button uses the guarded challenge action', () => {
+  const handlers = new Map();
+  const ctx = vm.createContext({ console, document: {
+    readyState: 'loading', addEventListener() {}, querySelectorAll: () => [],
+    getElementById: id => ({ addEventListener: (event, fn) => handlers.set(id + ':' + event, fn) })
+  } });
+  ctx.window = ctx;
+  for (const file of ['mathx', 'board', 'mechanics', 'app']) {
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../js', file + '.js'), 'utf8'), ctx);
+  }
+  const actions = [];
+  ctx.App.resume = () => { ctx.App.state = 'play'; };
+  ctx.App.challenge = {
+    action: name => actions.push([name, ctx.App.state]),
+    world: { finish: () => assert.fail('UI must not bypass guarded settlement') }
+  };
+  ctx.App.bindUI();
+  handlers.get('overlay:click')({ target: { closest: () => ({ dataset: { act: 'challengeFinish' } }) } });
+  assert.deepEqual(actions, [['finish', 'play']]);
+});
+
+for (const [remain, bonus] of [[0, 2000], [1, 1200], [2, 1100], [3, 1000], [4, 900], [5, 800], [6, 700], [7, 600], [8, 500], [9, 400], [10, 300], [11, 200], [12, 100], [13, 0], [14, 0], [30, 0]]) {
+  test(`normal ending with ${remain} leftovers awards exactly ${bonus} once`, () => {
+    prepareEnding(remain);
+    App.levelClear();
+    assert.equal(App.score, 500 + bonus);
+    assert.equal(App.levelScoreBonus, bonus);
+    assert.equal(App.levelRemain, remain);
+    App.levelClear();
+    assert.equal(App.score, 500 + bonus, 'repeated settlement cannot award the bonus again');
+    for (let frame = 0; frame < 300; frame++) App.updateAnimations(1 / 60);
+    assert.equal(App.score, 500 + bonus, 'leftover fireworks never award matching points');
+  });
+}
+
+for (const remain of [2, 13, 14, 30]) {
+  test(`normal ending with ${remain} leftovers explodes ${remain <= 13 ? 'one at a time' : 'simultaneously'}`, () => {
+    const bursts = prepareEnding(remain);
+    App.levelClear();
+    const burstsPerFrame = [];
+    for (let frame = 0; frame < 300; frame++) {
+      const before = bursts.length;
+      App.updateAnimations(1 / 60);
+      if (bursts.length > before) burstsPerFrame.push(bursts.length - before);
+    }
+    assert.equal(bursts.length, remain);
+    if (remain <= 13) assert.ok(burstsPerFrame.every(count => count === 1));
+    else assert.deepEqual(burstsPerFrame, [remain]);
+    assert.equal(App.dying.length, 0);
+  });
+}
