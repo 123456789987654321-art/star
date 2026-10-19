@@ -402,7 +402,7 @@
 
     // Shared hard zoom boundary for every input and game mode. Fit the actual
     // scene bounds with a small viewport margin, including shifted targets.
-    constrainZoom(tiles, focus = [0,0,0], bottom = .96) {
+    zoomRangeFor(tiles, focus = [0,0,0], bottom = .96, far = this.dist, padding = 0) {
       const lo=[Infinity,Infinity,Infinity],hi=[-Infinity,-Infinity,-Infinity];
       const box=[[-.5,-.5,-.5],[.5,-.5,-.5],[.5,.5,-.5],[-.5,.5,-.5],[-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]];
       for(const tile of tiles){
@@ -414,18 +414,34 @@
           lo[axis]=Math.min(lo[axis],p);hi[axis]=Math.max(hi[axis],p);
         }
       }
-      if(!Number.isFinite(lo[0]))return;
+      if(!Number.isFinite(lo[0]))return {near:Math.max(.31,far/1.6),far};
       const points=box.map(p=>p.map((v,i)=>v<0?lo[i]:hi[i]));
-      const radial=v3.norm(v3.sub(this.eye,focus)),tan=Math.tan(this.fov/2),margin=.92;
+      const radial=v3.norm(v3.sub(this.eye,focus)).map(v=>Math.round(v*1e12)/1e12),tan=Math.tan(this.fov/2),margin=.92;
+      const horizontal=Math.max(.25,margin-2*padding/(this.w/this.dpr||800)),vertical=Math.max(.25,margin-2*padding/(this.h/this.dpr||800));
       const fits=distance=>{
         const eye=v3.add(focus,v3.mul(radial,distance)),back=v3.norm(v3.sub(eye,this.target)),right=v3.norm(v3.cross(this.up,back)),up=v3.cross(back,right);
-        return points.every(p=>{const q=v3.sub(p,eye),depth=-v3.dot(q,back),y=v3.dot(q,up);return depth>.31&&Math.abs(v3.dot(q,right))<=depth*tan*this.aspect*margin&&y<=depth*tan*margin&&y>=depth*tan*(1-2*bottom);});
+          return points.every(p=>{const q=v3.sub(p,eye),depth=-v3.dot(q,back),y=v3.dot(q,up);return depth>.31&&Math.abs(v3.dot(q,right))<=depth*tan*this.aspect*horizontal&&y<=depth*tan*vertical&&y>=depth*tan*(1-2*bottom+2*padding/(this.h/this.dpr||800));});
       };
-      if(fits(this.dist))return;
-      let low=this.dist,high=Math.max(1,this.dist);
+      // A fixed bracket keeps a resting camera deterministic across frames.
+      let low=.31,high=1;
       for(let i=0;i<24&&!fits(high);i++)high*=1.5;
       for(let i=0;i<24;i++){const mid=(low+high)/2;if(fits(mid))high=mid;else low=mid;}
-      this.dist=high+1e-5;this.eye=v3.add(focus,v3.mul(radial,this.dist));
+      const near=high+1e-5;return {near,far:Math.max(far,near*1.35)};
+    }
+
+    applyZoom(tiles, focus = [0,0,0], bottom = .96, far = this.dist, value = 0, padding = 0) {
+      const radial=v3.norm(v3.sub(this.eye,focus)).map(v=>Math.round(v*1e12)/1e12);
+      this.zoomRange=this.zoomRangeFor(tiles,focus,bottom,far,padding);
+      const range=this.zoomRange,t=MX.clamp(value,0,1);
+      this.dist=1/((1-t)/range.far+t/range.near);
+      this.eye=v3.add(focus,v3.mul(radial,this.dist));
+      return this.dist;
+    }
+
+    constrainZoom(tiles, focus = [0,0,0], bottom = .96) {
+      const radial=v3.norm(v3.sub(this.eye,focus)),range=this.zoomRangeFor(tiles,focus,bottom,this.dist);
+      if(this.dist>=range.near-1e-5)return;
+      this.dist=range.near;this.eye=v3.add(focus,v3.mul(radial,this.dist));
     }
 
     beginFrame() {

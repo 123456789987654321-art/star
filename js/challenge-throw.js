@@ -7,7 +7,7 @@
   enabled(){return this.world.phase==='aim'&&this.game.app.state==='play'&&!this.game.intro&&!this.world.result;}
   ray(e){const sc=this.game.app.scene,rect=(sc.canvas||sc.gl?.canvas)?.getBoundingClientRect?.();return sc._ray((e.clientX-(rect?.left||0))/(rect?.width||g.innerWidth||sc.w)*2-1,1-(e.clientY-(rect?.top||0))/(rect?.height||g.innerHeight||sc.h)*2);}
   planePoint(e){const ray=this.ray(e),a=this.world.sling.anchor,n=this.planeNormal,den=ray.d.reduce((s,v,i)=>s+v*n[i],0);if(Math.abs(den)<1e-7)return null;const t=a.reduce((s,v,i)=>s+(v-ray.o[i])*n[i],0)/den;return t>0?ray.o.map((v,i)=>v+ray.d[i]*t):null;}
-  aim(e){const p=this.planePoint(e);if(!p)return;let pull=p.map((v,i)=>v-this.grab[i]),length=Math.hypot(...pull);if(length>1.05)pull=pull.map(v=>v*1.05/length);this.power=Math.min(1,length/1.05);this.world.action('throw-aim',{pull});}
+  aim(e){const p=this.planePoint(e);if(!p)return;let pull=p.map((v,i)=>v-this.grab[i]),length=Math.hypot(...pull);if(length>1.05)pull=pull.map(v=>v*1.05/length);this.power=Math.min(1,length/1.05);const view=this.game.app.scene.eye.map((v,i)=>v-this.world.sling.anchor[i]-pull[i]);this.world.action('throw-aim',{pull,view});}
   pointerDown(e){
    if(!this.enabled()||(e.button!==undefined&&e.button!==0))return false;
    if(this.charging){if(e.pointerId!==this.pointerId){this.cancel();return false;}return true;}

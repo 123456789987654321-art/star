@@ -68,14 +68,14 @@ test('surface gravity never jumps over empty space or changes surface depth',()=
     assert.ok(transitions>0,name+' exercises actual gravity lanes');
   }
 });
-test('perpendicular cube rings touch without overlapping solid volume',()=>{
+test('equal perpendicular rings touch without overlapping solid volume',()=>{
   require('../js/challenge-world.js');
   const world=new ChallengeWorld(7,()=>.1);
   const spans=world.components.map(comp=>{
     const vertices=world.cells.filter(c=>c.component===comp.id).flatMap(c=>world._vertices(c));
     return Math.max(...vertices.map(p=>p[0]))-Math.min(...vertices.map(p=>p[0]));
   });
-  assert.ok(spans[1]/spans[0]>=.70,'inner ring is nearly the diameter of the outer opening');
+  assert.ok(Math.abs(spans[1]-spans[0])<1e-8,'both rings have the same diameter');
   const bounds=world.cells.map(c=>{
     const points=world._vertices(c);
     return [0,1,2].map(i=>[Math.min(...points.map(p=>p[i])),Math.max(...points.map(p=>p[i]))]);

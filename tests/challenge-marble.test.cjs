@@ -35,11 +35,18 @@ test('triangle edge and corner impacts score once until the ball separates',()=>
  m.position=[a[0]+nx/norm*.125,a[1]+ny/norm*.125,0];m.velocity=[-nx/norm,-ny/norm,0];w.update(.001);
  assert.equal(w.score,200);assert.equal(m.collisionCount,2);
 });
-test('an approaching ball scores on actual impact and resting contacts do not farm points',()=>{
- const w=fresh();w.action('release');
- for(let i=0;i<600;i++)w.update(.005);
- assert.ok(w.marble.collisionCount>0);assert.equal(w.score,w.marble.collisionCount*100);
- const count=w.marble.collisionCount;
- for(let i=0;i<600;i++)w.update(.005);
- assert.equal(w.marble.collisionCount,count);
+test('upward obstacle pairs have sloped roofs, matching partners, varied colors and open gaps',()=>{
+ const w=fresh(),edges=w.contacts();assert.ok(new Set(w.cells.map(c=>c.color)).size>=4);
+ for(let i=0;i<w.cells.length;i+=2){const pair=w.cells.slice(i,i+2),points=pair.flatMap(c=>w._vertices(c).slice(0,3)),top=Math.max(...points.map(p=>p[1]));
+  assert.equal(new Set(points.filter(p=>Math.abs(p[1]-top)<1e-8).map(p=>p[0].toFixed(8))).size,1);
+  assert.equal(pair[0].color,pair[1].color);assert.ok(edges.some(e=>e.includes(pair[0].id)&&e.includes(pair[1].id)));
+ }
+});
+test('launcher angle changes ball direction and is locked during flight',()=>{
+ for(const direction of [-1,1]){const w=fresh(),m=w.marble;w.cells.forEach(c=>c.color=-1);assert.equal(w.action('marble-aim',direction*.6),true);assert.equal(m.aimAngle,direction*.6);const x=m.position[0];w.action('release');assert.ok(m.velocity[0]*direction>0);assert.ok(m.velocity[1]<0);assert.equal(w.action('marble-aim',0),false);w.update(.1);assert.ok((m.position[0]-x)*direction>0);}
+ const w=fresh(),m=w.marble;assert.equal(m.launcher.length,4);w.action('marble-aim',10);assert.equal(m.aimAngle,m.maxAimAngle);assert.ok(m.launcher.some(p=>Math.abs(p.basis[1])>.5));assert.deepEqual(w.ballVisual[0].center,m.position);assert.equal(w.action('marble-aim',NaN),false);
+});
+test('intact obstacles and exact apex impacts cannot trap a ball indefinitely',()=>{
+ for(const angle of [-.6,0,.6]){const w=fresh();w.action('marble-aim',angle);w.action('release');for(let i=0;i<2500&&w.marble.released;i++)w.update(.01);assert.equal(w.marble.drops,1,'intact board descent '+angle);}
+ const w=fresh();w.cells=w.cells.slice(0,2);const points=w.cells.flatMap(c=>w._vertices(c).slice(0,3)),apex=points.reduce((a,b)=>a[1]>b[1]?a:b);w.action('release');w.marble.position=[apex[0],apex[1]+.5,0];w.marble.velocity=[0,-1,0];for(let i=0;i<2000&&w.marble.released;i++)w.update(.01);assert.equal(w.marble.drops,1);
 });

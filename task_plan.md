@@ -61,3 +61,10 @@ Zoom correction complete:189 tests, all54 desktop/mobile maximum-zoom cases and 
 - Six 8×9 floors, each with two independent cube layers above one complete support plate; four 3×3×4 corner pillars, with varying immutable pillars.
 - Single/diagonal loss stays level; same-side or three-corner loss tilts; stumps catch plates and missing pillars allow collapse onto lower floors. Removing a base immediately releases cubes and the person.
 - Implemented and reviewed; all 194 tests passed, including 12 tower regressions. Final desktop/mobile browser report has no errors or failed checks. Automatic star/main upload follows.
+
+## Challenge revision batch complete
+- Replaced level 8 assembly with rotating Rubik faces and cross-groove microcube gravity.
+- Revised sphere, frustum and crossed rings to broad quadrilateral surfaces.
+- Corrected sling depth, restricted seesaw camera to translation, and added pointed marble obstacles with aimable launcher.
+- Mapped the full zoom slider to its effective range; stabilized resting and sling cameras.
+- Final verification: 212/212 Node tests passed; real Edge desktop/mobile report errors=[] and failed=[]. Independent review completed. Publish to star/main authorized.

@@ -596,7 +596,11 @@
 
     render() {
       const sc = this.scene;
-      if(this.state!=='menu'&&this.state!=='intro')sc.constrainZoom?.(this.tiles||[]);
+      if(this.state!=='menu'&&this.state!=='intro'){
+        if(sc.applyZoom)sc.applyZoom(this.tiles||[],[0,0,0],.96,sc.fitDist*1.25,this.zoom);
+        else sc.constrainZoom?.(this.tiles||[]);
+        if(sc.zoomRange)document.getElementById('zoomSlider')?.setAttribute('aria-valuetext',Math.round(100*sc.zoomRange.far/sc.dist)+'%');
+      }
       sc.beginFrame();
       // 只绘制彩色方块外壳；消除后的空洞直接露出内部。
       const list = this.renderList;
@@ -624,13 +628,16 @@
     setZoom(value) {
       if(this.challenge)return this.challenge.zoom(value);
       this.zoom = clamp(value, 0, 1);
-      this.scene.dist = this.scene.fitDist * 1.25 / (1 + 0.6 * this.zoom);
+      const range=this.scene.zoomRange;
+      this.scene.dist = range?1/((1-this.zoom)/range.far+this.zoom/range.near):this.scene.fitDist * 1.25 / (1 + 0.6 * this.zoom);
       const slider = document.getElementById('zoomSlider');
       slider.value = String(this.zoom * 100);
-      slider.setAttribute('aria-valuetext', Math.round(100 + 60 * this.zoom) + '%');
+      slider.setAttribute('aria-valuetext', Math.round(100 * (range?range.far/this.scene.dist:1+.6*this.zoom)) + '%');
     },
 
     setZoomFromDistance(distance) {
+      const range=this.scene.zoomRange;
+      if(range)return this.setZoom((1/Math.max(.001,distance)-1/range.far)/(1/range.near-1/range.far));
       if(this.challenge)return this.setZoom((this.challenge.fit/Math.max(.001,distance)-1)/1.5);
       this.setZoom((this.scene.fitDist * 1.25 / Math.max(distance, 0.001) - 1) / 0.6);
     },
@@ -672,6 +679,7 @@
           if(pts.size>=2){this.challenge.thrower.cancel();const a=[...pts.values()];pinch=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);dragging=true;return;}
           if(this.challenge.thrower.pointerDown(e))return;
         }
+        if(this.challenge?.rubikControls?.pointerDown(e)){cv.setPointerCapture(e.pointerId);return;}
         if(this.challenge?.assembly?.pointerDown(e)){cv.setPointerCapture(e.pointerId);return;}
         this.hintCamera = null;
         cv.setPointerCapture(e.pointerId);
@@ -686,6 +694,7 @@
 
       cv.addEventListener('pointermove', (e) => {
         if(pts.size<2&&this.challenge?.thrower?.pointerMove(e)){const p=pts.get(e.pointerId);if(p){p.x=e.clientX;p.y=e.clientY;}return;}
+        if(this.challenge?.rubikControls?.pointerMove(e))return;
         if(this.challenge?.assembly?.pointerMove(e))return;
         const p = pts.get(e.pointerId);
 
@@ -710,12 +719,13 @@
         if (moved > 7) {
           dragging = true;
           this.clearHover();
-          this.scene.rotateOrbit(dx, dy);
+          if(!this.challenge?.pan(dx,dy))this.scene.rotateOrbit(dx, dy);
         }
       });
 
       const endPointer = (e) => {
         if(this.challenge?.thrower?.pointerUp(e)){pts.delete(e.pointerId);moved=0;dragging=false;pinch=0;return;}
+        if(this.challenge?.rubikControls?.pointerUp(e)){pts.delete(e.pointerId);moved=0;dragging=false;pinch=0;return;}
         if(this.challenge?.assembly?.pointerUp(e)){pts.delete(e.pointerId);moved=0;dragging=false;pinch=0;return;}
         const wasSingle = pts.size === 1;
         pts.delete(e.pointerId);
@@ -725,7 +735,7 @@
         moved = 0; dragging = false; pinch = 0;
       };
       cv.addEventListener('pointerup', endPointer);
-      cv.addEventListener('pointercancel', (e) => { this.challenge?.assembly?.cancel();this.challenge?.thrower?.cancel();pts.delete(e.pointerId); pinch = 0; });
+      cv.addEventListener('pointercancel', (e) => { this.challenge?.rubikControls?.cancel();this.challenge?.assembly?.cancel();this.challenge?.thrower?.cancel();pts.delete(e.pointerId); pinch = 0; });
 
       cv.addEventListener('pointerleave', () => { if (this.state === 'play') this.clearHover(); });
 

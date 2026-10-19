@@ -116,6 +116,69 @@
     const s=options.size===undefined?2:options.size;
     const n=Math.max(2,Math.min(16,Math.round(options.resolution||7)));
     const cells=[];
+    if(name==='frustum'&&options.quadFaces){
+      // Warp a complete cube grid with the taper rather than cutting its
+      // outside columns into thin strips. Corresponding layer corners keep
+      // every face planar and fill the original frustum exactly.
+      for(let x=0;x<n;x++)for(let z=0;z<n;z++)for(let y=0;y<n;y++){
+        const vertices=[y,y+1].flatMap(layer=>{
+          const height=-s+2*s*layer/n,width=s*.74-.26*height;
+          return [[x,z],[x+1,z],[x+1,z+1],[x,z+1]].map(([u,v])=>[(2*u/n-1)*width,height,(2*v/n-1)*width]);
+        });
+        const center=mul(vertices.reduce(add,[0,0,0]),1/8),local=vertices.map(p=>sub(p,center));
+        cells.push({center,poly:{vertices:local,faces:hull(local)},track:'frustum:'+x+':'+z,order:y});
+      }
+      return cells;
+    }
+    if(name==='sphere'&&options.quadFaces){
+      // Project six square grids onto the sphere. Each colored patch owns
+      // one complete quad and a solid radial wedge, so there are no tiny
+      // independently colored clipping fragments or pinched polar fans.
+      for(let axis=0;axis<3;axis++)for(const sign of [-1,1]){
+        const axes=[0,1,2].filter(a=>a!==axis);
+        const point=(u,v)=>{
+          const p=[0,0,0];p[axis]=sign;p[axes[0]]=2*u/n-1;p[axes[1]]=2*v/n-1;
+          return mul(p,s/Math.hypot(...p));
+        };
+        for(let u=0;u<n;u++)for(let v=0;v<n;v++){
+          const quad=[point(u,v),point(u+1,v),point(u+1,v+1),point(u,v+1)];
+          if(dot(cross(sub(quad[1],quad[0]),sub(quad[2],quad[0])),quad[0])<0)quad.reverse();
+          const vertices=quad.concat([[0,0,0]]),center=mul(vertices.reduce(add,[0,0,0]),1/5);
+          const faces=[[0,1,2,3],[1,0,4],[2,1,4],[3,2,4],[0,3,4]];
+          cells.push({center,poly:{vertices:vertices.map(p=>sub(p,center)),faces},track:'sphere:'+axis+':'+sign+':'+u,order:v});
+        }
+      }
+      return cells;
+    }
+    if(name==='torus'&&options.joinedRing){
+      // Two equal perpendicular bands share the short bars at +/-x. The
+      // crossing band omits those bars, joining their complete rectangular
+      // faces instead of placing a second solid over the same volume.
+      // Circular arcs are tiled directly with quad prisms, avoiding the
+      // triangular cut-offs produced by clipping an axis-aligned grid.
+      const half=s*.125,inner=s*.75,radial=2,segments=Math.max(16,n*2+2);
+      const radii=Array.from({length:radial+1},(_,i)=>inner+(s-inner)*i/radial);
+      const arc=(r,i,sign)=>{
+        const start=Math.asin(half/r),angle=start+(Math.PI-2*start)*i/segments;
+        return [r*Math.cos(angle),sign*r*Math.sin(angle)];
+      };
+      const prism=(quad,track)=>{
+        for(let layer=0;layer<2;layer++){
+          const vertices=[-half+layer*half,layer*half].flatMap(y=>quad.map(([x,z])=>[x,y,z]));
+          const center=mul(vertices.reduce(add,[0,0,0]),1/8),local=vertices.map(p=>sub(p,center));
+          cells.push({center,poly:{vertices:local,faces:hull(local)},track,order:layer});
+        }
+      };
+      for(const sign of [-1,1])for(let i=0;i<segments;i++)for(let row=0;row<radial;row++){
+        prism([arc(radii[row],i,sign),arc(radii[row],i+1,sign),arc(radii[row+1],i+1,sign),arc(radii[row+1],i,sign)],'ring:'+sign+':'+i+':'+row);
+      }
+      if(options.joinedRing==='full')for(const sign of [-1,1])for(let row=0;row<radial;row++)for(let strip=0;strip<2;strip++){
+        const x0=sign*Math.sqrt(radii[row]**2-half**2),x1=sign*Math.sqrt(radii[row+1]**2-half**2);
+        const z0=-half+strip*half,z1=z0+half;
+        prism([[x0,z0],[x0,z1],[x1,z1],[x1,z0]],'junction:'+sign+':'+row+':'+strip);
+      }
+      return cells;
+    }
     if(name==='tetrahedron'&&options.quadFaces){
       // Divide the triangular base into three quadrilateral patches, then
       // taper matching layers toward the apex. Side cuts follow the faces,

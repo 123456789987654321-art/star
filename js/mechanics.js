@@ -8,7 +8,7 @@
   };
   g.LevelProfile = (level, mode) => {
     if(mode==='challenge') {
-      const names=['三棱锥','圆柱体','球体','高楼营救','三棱柱','棱台','十字双环','自由拼接','啮合齿轮','投射补靶','平衡跷跷板','弹珠通道'];
+      const names=['三棱锥','圆柱体','球体','高楼营救','三棱柱','棱台','十字双环','魔方消除','啮合齿轮','投射补靶','平衡跷跷板','弹珠通道'];
       const n=Math.max(1,Math.min(12,Math.floor(level)));
       return {size:7,kind:'challenge',title:names[n-1]};
     }

@@ -40,10 +40,27 @@ test('rotated camera maps a screen pull to the opposite screen launch direction'
  const baseline=m.project([0,-1.7,.09]);assert.equal(t.pointerDown(e),true);
  const drag={...e,clientX:e.clientX+55,clientY:e.clientY+65};t.pointerMove(drag);
  const aim=m.project([w.aim.x,w.aim.y,.09]);assert.ok(aim[0]<baseline[0]);assert.ok(aim[1]<baseline[1]);
+ const held=m.project(w.sling.loaded.center);assert.ok(Math.hypot(held[0]-drag.clientX,held[1]-drag.clientY)<.01,'drawing toward the rotated camera preserves the pointer position');
+ assert.ok(w.sling.loaded.center[2]-.14>2.5,'rotated view pull remains clear of the wooden frame');
+ assert.deepEqual(Array.from(w.launch.start),Array.from(w.sling.loaded.center));
  t.pointerUp(drag);assert.equal(w.ammo.length,9);assert.ok(w.projectile);
 });
 test('all ten missing cubes can be filled and then participate in elimination',()=>{
  const {world:w}=fixture(),holes=w.cells.filter(c=>c.hole);assert.equal(holes.length,10);
  for(const hole of holes){w.action('aim',{x:hole.center[0],y:hole.center[1]});assert.equal(w.previewHit.id,hole.id);w.action('shoot');w.update(2);assert.equal(hole.hole,false);assert.ok(hole.color>=0);}
  assert.equal(w.phase,'play');assert.equal(w.cells.filter(c=>c.hole).length,0);assert.equal(w.canRemove(),true);
+});
+
+test('pull moves held cube in front of the fork and bands join the pouch edges',()=>{
+ const {world:w,thrower:t,e}=fixture();t.pointerDown(e);t.pointerMove({...e,clientY:e.clientY+90});
+ const s=w.sling,p=s.loaded.center;assert.ok(p[2]>s.anchor[2]+.1,'drag draws toward the viewer');
+ assert.ok(p[2]-.14>2.5,'cube stays ahead of the wooden handle');
+ assert.deepEqual(Array.from(w.launch.start),Array.from(p));assert.deepEqual(Array.from(w.trajectory[0]),Array.from(p));
+ assert.ok(s.pouch,'visible pouch supports the held cube');
+ for(let i=0;i<2;i++){
+  const band=s.bands[i],vertices=w._vertices(band),ends=[-1,1].map(sign=>band.center.map((v,k)=>v+sign*band.basis[3+k]*Math.hypot(...band.end.map((n,j)=>n-band.start[j]))/2));
+  assert.ok(ends[0].every((v,k)=>Math.abs(v-band.start[k])<1e-8));assert.ok(ends[1].every((v,k)=>Math.abs(v-band.end[k])<1e-8));
+  assert.ok(Math.abs(band.end[0]-s.pouch.center[0])>.14);assert.ok(Math.abs(band.end[2]-s.pouch.center[2])<1e-8);assert.ok(vertices.length===8);
+ }
+ const held=Array.from(p),preview=JSON.stringify(w.trajectory);t.pointerUp({...e,clientY:e.clientY+90});assert.deepEqual(Array.from(w.projectile.start),held);assert.equal(JSON.stringify(w.projectile.path),preview);
 });

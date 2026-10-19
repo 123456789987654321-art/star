@@ -39,3 +39,12 @@ test('wheel/pinch distance updates the slider, resizing preserves magnification,
   assert.equal(a.scene.yaw, 0.62);
   assert.equal(a.scene.pitch, 0.42);
 });
+
+test('wheel and pinch use the effective range rather than a hidden clamped distance',()=>{
+ const {app:a,slider}=app();a.scene.zoomRange={far:20,near:12};let previous=Infinity;
+ for(let step=0;step<=100;step++){a.setZoom(step/100);assert.ok(a.scene.dist<previous);previous=a.scene.dist;}
+ assert.equal(a.scene.dist,12);a.setZoomFromDistance(15);assert.ok(Math.abs(a.scene.dist-15)<1e-10);assert.ok(Math.abs(Number(slider.value)-50)<1e-8);
+ a.setZoomFromDistance(2);assert.equal(a.scene.dist,12);assert.equal(Number(slider.value),100);
+ a.setZoomFromDistance(40);assert.equal(a.scene.dist,20);assert.equal(Number(slider.value),0);
+ a.scene.zoomRange={far:40,near:24};a.setZoom(.5);assert.equal(a.scene.dist,30);assert.equal(Number(slider.value),50);
+});

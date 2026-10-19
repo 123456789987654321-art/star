@@ -2,6 +2,7 @@
 (function(root){
   'use strict';
   if(typeof module!=='undefined'&&module.exports&&!root.ChallengeTower)require('./challenge-tower.js');
+  if(typeof module!=='undefined'&&module.exports&&!root.ChallengeRubik)require('./challenge-rubik.js');
   const PALETTE=[[.97,.24,.32],[.64,.34,.99],[.20,.85,.50],[.22,.58,1],[1,.80,.22],[1,.44,.79]];
   const I=[1,0,0,0,1,0,0,0,1], shapes=['tetrahedron','cylinder','sphere','prism','frustum','torus'];
   const add=(a,b)=>a.map((v,i)=>v+b[i]);
@@ -65,7 +66,7 @@
       this.components.push(component);
       const G=root.ChallengeGeometry;
       for(const slot of G.make(name,{
-        size,resolution:[8,9,11].includes(this.level)?4:7,smooth:this.level<=8,quadFaces:this.level===1
+        size,resolution:[8,9,11].includes(this.level)?4:7,smooth:this.level<=8,quadFaces:[1,3,6].includes(this.level),joinedRing:extra.joinedRing
       })){
         const c=this._cell(add(position,mul(basis,slot.center)),slot.poly,id,{
           ...slot,...extra
@@ -105,16 +106,12 @@
         })[n]);
       }
       if(n===7){
-        this._shape('torus',2.4);
-        // The smooth inner opening is 75% of the outer radius. Its axial
-        // contact flats meet the smaller perpendicular ring without overlap.
-        this._shape('torus',2.4*.75,[0,0,0],rotation('x',Math.PI/2));
+        this._shape('torus',2.4,[0,0,0],I,{joinedRing:'full'});
+        this._shape('torus',2.4,[0,0,0],rotation('x',Math.PI/2),{joinedRing:'cross'});
         this.bounds=3.1;
       }
       if(n===8){
-        this.phase='assemble';
-        this.selected=null;
-        this.bounds=4;
+        root.ChallengeRubik.build(this);
       }
       if(n===4)root.ChallengeTower.build(this);
       if(n===9)this._gearsBuild();
@@ -138,7 +135,7 @@
       return this.cells.reduce((n,c)=>n+(c.color>=0&&c.color<6),0);
     }
     canRemove(){
-      return this.phase==='play'&&!this.result&&!(this.gears&&this.gears.moving);
+      return this.phase==='play'&&!this.result&&!(this.gears&&this.gears.moving)&&!(this.rubik&&this.rubik.turn);
     }
     canRemoveCell(id){
       const c=this.cells.find(c=>c.id===id);
@@ -160,7 +157,8 @@
       if(!removed.length)return removed;
       this.score+=Math.round(5*removed.length*removed.length*scoreMultiplier);
       if(this.seesaw)this.lastMultiplier=scoreMultiplier;
-      if(this.level!==12&&this.level!==4){
+      if(this.rubik)root.ChallengeRubik.settle(this);
+      if(this.level!==12&&this.level!==4&&!this.rubik){
         const tracks=new Map();
         for(const c of this.cells){
           if(c.track==='fixed')continue;
@@ -191,6 +189,7 @@
       return c.poly.vertices.map(v=>add(c.center,mul(c.basis||I,v)));
     }
     contacts(){
+      if(this.rubik&&this.cells.length===1350&&this.cells[0].rubikFace===0)return root.ChallengeRubik.contacts(this);
       if(this._contactCache&&this._contactRevision===this.revision)return this._contactCache;
       const vertices=new Map(),pairs=new Map();
       for(const c of this.cells){
@@ -325,13 +324,19 @@
     }
     action(name,value){
       if(this.result)return '本关已结束';
-      if(this.level===8&&this.phase==='assemble')return this._assembly(name,value);
+      if(this.level===8)return name==='turn'?root.ChallengeRubik.turn(this,value):false;
       if((name==='aim'||name==='throw-aim')&&this.level===10&&this.phase==='aim'){
         const x=Number(value.x)||0,y=Number(value.y)||0;
         if(name==='throw-aim'){
-          this.sling.pull=(value.pull||[0,0,0]).map(v=>Number(v)||0);
-          this.throwPower=Math.min(1,Math.hypot(...this.sling.pull)/1.05);
-          this.aim={x:-this.sling.pull[0]*4,y:-1.7-this.sling.pull[1]*4};
+          const pull=(value.pull||[0,0,0]).map(v=>Number(v)||0),length=Math.hypot(...pull);
+          this.throwPower=Math.min(1,length/1.05);
+          this.aim={x:-pull[0]*4,y:-1.7-pull[1]*4};
+          const view=value.view||[0,0,1],viewLength=Math.hypot(...view)||1,forward=view.map(v=>v/viewLength);
+          // Keep aiming in the drag plane, but draw the pouch toward the eye.
+          // The ray to the eye preserves its screen position under perspective.
+          let depth=.8*length;
+          if(forward[2]>.2)depth=Math.max(depth,-pull[2]/forward[2]);
+          this.sling.pull=pull.map((v,i)=>v+forward[i]*depth);
         }else {this.sling.pull=[0,0,0];this.aim={x,y};}
         this._preview();
         return '已更新落点';
@@ -353,8 +358,14 @@
         this._seesawUpdate(0);
         return '已移动集合体';
       }
+      if(name==='marble-aim'&&this.level===12){
+        if(this.marble.released||!Number.isFinite(value))return false;
+        this.marble.aimAngle=Math.max(-this.marble.maxAimAngle,Math.min(this.marble.maxAimAngle,value));
+        this._marbleLauncher();return true;
+      }
       if(name==='release'&&this.level===12&&!this.marble.released&&this.marble.drops<this.marble.totalDrops){
         this.marble.released=true;
+        this.marble.velocity=[Math.sin(this.marble.aimAngle)*3,-Math.cos(this.marble.aimAngle)*3,0];
         return '弹珠已释放';
       }
       return '当前阶段无法执行';
@@ -592,7 +603,7 @@
       this.bounds=4;
       this.ammo=[];
       this.throwPower=0;
-      this.sling={anchor:[0,-1.7,2.4],pull:[0,0,0],bands:[]};
+      this.sling={anchor:[0,-1.7,2.76],pull:[0,0,0],bands:[],forks:[[-.34,-1.56,2.47],[.34,-1.56,2.47]]};
       this.targetRadius=1.25;
       this.targetCenters=[[-1.6,0,0],[1.6,0,0]];
       this.targetLabels=this.targetCenters.flatMap((c,target)=>Array.from({
@@ -627,19 +638,22 @@
           }
         }
       }
-      this._box([0,-2.2,2.4],[.10,.5,.10],[.43,.25,.12]);
+      this._box([0,-2.46,2.4],[.10,.30,.10],[.43,.25,.12]);
+      this._box([0,-2.16,2.4],[.34,.065,.065],[.43,.25,.12]);
       for(const x of [-.34,.34])this._box([x,-1.88,2.4],[.065,.32,.065],[.51,.31,.15]);
       this.sling.bands=[-1,1].map(()=>this._box([0,0,0],[.025,.5,.025],[.24,.12,.06]));
+      this.sling.pouch=this._box(this.sling.anchor,[.19,.12,.025],[.26,.13,.07]);
       this.sling.loaded=this._box(this.sling.anchor,[.14,.14,.14],PALETTE[this.ammo[0]]);
       this._preview();
     }
     _slingVisual(){
       const s=this.sling,p=s.anchor.map((v,i)=>v+s.pull[i]);
       s.loaded.center=p;s.loaded.rgb=PALETTE[this.ammo[0]]||PALETTE[0];s.loaded.alpha=this.ammo.length&&!this.projectile?1:0;
+      s.pouch.center=[p[0],p[1],p[2]-.165];
       s.bands.forEach((band,i)=>{
-        const a=[i?.34:-.34,-1.56,2.4],d=p.map((v,j)=>v-a[j]),length=Math.hypot(...d),y=d.map(v=>v/length);
+        const a=s.forks[i],end=s.pouch.center.map((v,k)=>v+(k===0?(i?.19:-.19):0)),d=end.map((v,j)=>v-a[j]),length=Math.hypot(...d),y=d.map(v=>v/length);
         const xl=Math.hypot(y[0],y[1])||1,x=[y[1]/xl,-y[0]/xl,0],z=[x[1]*y[2],-x[0]*y[2],x[0]*y[1]-x[1]*y[0]];
-        band.center=a.map((v,j)=>(v+p[j])/2);band.poly=cube(.025,length/2,.025);band.basis=[...x,...y,...z];
+        band.start=a.slice();band.end=end;band.center=a.map((v,j)=>(v+end[j])/2);band.poly=cube(.025,length/2,.025);band.basis=[...x,...y,...z];
       });
     }
     _preview(){
@@ -818,15 +832,19 @@
     }
     _marbleBuild(){
       this.bounds=6.3;
-      const step=.65;
-      for(let y=0;y<14;y++)for(let x=0;x<8;x++)for(let t=0;t<2;t++){
-        const left=-2.6+x*step,bottom=4.55-(y+1)*step;
-        const points=t===0?[[left,bottom],[left+step,bottom],[left+step,bottom+step]]:[[left,bottom],[left+step,bottom+step],[left,bottom+step]];
+      const step=.65,width=.30,height=.32;
+      // Each upward wedge is two matching solids; open channels exceed a ball diameter.
+      for(let y=0;y<14;y++)for(let x=0;x<8;x++){
+       const middle=(x-3.5)*.59+(y%2?.10:-.10),bottom=4.25-y*step;
+       const color=(Math.floor(this.rng()*6)+x+3*y)%6;
+       for(let t=0;t<2;t++){
+        const points=t===0?[[middle-width/2,bottom],[middle,bottom],[middle,bottom+height]]:[[middle,bottom],[middle+width/2,bottom],[middle,bottom+height]];
         const center=[points.reduce((n,p)=>n+p[0],0)/3,points.reduce((n,p)=>n+p[1],0)/3,0];
         const vertices=[-.1,.1].flatMap(z=>points.map(p=>[p[0]-center[0],p[1]-center[1],z]));
-        this._cell(center,{vertices,faces:[[0,2,1],[3,4,5],[0,1,4,3],[1,2,5,4],[2,0,3,5]]},0,{grid:[x,y,t]});
+        this._cell(center,{vertices,faces:[[0,2,1],[3,4,5],[0,1,4,3],[1,2,5,4],[2,0,3,5]]},0,{grid:[x,y,t],color});
+       }
       }
-      this.marble={position:[0,5.25,0],velocity:[0,0,0],released:false,bin:null,lastBin:null,drops:0,totalDrops:3,color:0,collisionCount:0,contacts:new Set()};
+      this.marble={position:[0,5.08,0],velocity:[0,0,0],released:false,bin:null,lastBin:null,drops:0,totalDrops:3,color:0,collisionCount:0,contacts:new Set(),aimAngle:0,maxAimAngle:Math.PI*50/180,launcherPivot:[0,5.3,0],launcher:[]};
       // Subdivide a round octahedron independently of the voxel scenery.
       const vertices=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
       let faces=[[0,2,4],[4,2,1],[1,2,5],[5,2,0],[0,4,3],[4,1,3],[1,5,3],[5,0,3]];
@@ -837,6 +855,9 @@
       }
       this.ballVisual=[{center:[0,5.25,0],local:[0,0,0],poly:{vertices:vertices.map(v=>v.map(n=>n*.13)),faces},basis:I.slice(),rgb:PALETTE[0],alpha:1}];
       this.decorations.push(...this.ballVisual);
+      for(const [local,half] of [[[-.2,-.06,0],[.035,.3,.16]],[[.2,-.06,0],[.035,.3,.16]],[[0,.24,0],[.235,.055,.16]],[[0,-.1,-.18],[.23,.28,.025]]]){
+        const part=this._box(add(this.marble.launcherPivot,local),half,[.26,.42,.56]);part.launcherLocal=local;this.marble.launcher.push(part);
+      }
       for(const x of [-2.8,2.8])this._box([x,.1,0],[.12,5.8,.30],[.5,.7,.8],.92);
       this._box([0,5.85,0],[2.92,.12,.30],[.5,.7,.8],.92);
       this.bins=[0,1,2,3,4];
@@ -853,6 +874,12 @@
       m.position=[0,5.25,0];m.velocity=[0,0,0];m.released=false;m.bin=null;m.contacts.clear();
       m.color=Math.max(0,Math.min(4,Math.floor(this.rng()*5)));
       for(const d of this.ballVisual){d.center=m.position.slice();d.rgb=PALETTE[m.color];}
+      this._marbleLauncher();
+    }
+    _marbleLauncher(){
+      const m=this.marble,basis=rotation('z',m.aimAngle);
+      for(const part of m.launcher){part.center=add(m.launcherPivot,mul(basis,part.launcherLocal));part.basis=basis.slice();}
+      if(!m.released){m.position=add(m.launcherPivot,mul(basis,[0,-.22,0]));for(const d of this.ballVisual)d.center=add(m.position,d.local);}
     }
     _marbleUpdate(dt){
       const m=this.marble;if(!m.released||m.bin!==null)return;
@@ -876,8 +903,11 @@
           if(m.contacts.has(c.id)&&(inside||distance<radius+.04))near.add(c.id);
           if(!inside&&distance>=radius)continue;
           near.add(c.id);
-          const nx=inside||distance<1e-10?outward[0]:(m.position[0]-nearest[0])/distance;
-          const ny=inside||distance<1e-10?outward[1]:(m.position[1]-nearest[1])/distance;
+          let nx=inside||distance<1e-10?outward[0]:(m.position[0]-nearest[0])/distance;
+          let ny=inside||distance<1e-10?outward[1]:(m.position[1]-nearest[1])/distance;
+          // A perfectly centered point contact is an unstable equilibrium.
+          // A tiny deterministic normal perturbation lets gravity tip it off the apex.
+          if(Math.abs(nx)<1e-5&&ny>.999&&Math.abs(nearest[1]-Math.max(...points.map(p=>p[1])))<1e-6){nx=(c.grid[0]%2?1:-1)*.06;ny=Math.sqrt(1-nx*nx);}
           const overlap=inside?radius+distance:radius-distance;
           m.position[0]+=nx*(overlap+1e-6);m.position[1]+=ny*(overlap+1e-6);
           const speed=m.velocity[0]*nx+m.velocity[1]*ny;
@@ -907,6 +937,7 @@
       dt=Math.min(dt,5);
       this.time+=dt;
       if(this.level===4)root.ChallengeTower.update(this,dt);
+      if(this.level===8)root.ChallengeRubik.update(this,dt);
       if(this.level===9)this._gearsUpdate();
       if(this.level===10)this._shotUpdate(dt);
       if(this.level===11)this._seesawUpdate(dt);
@@ -914,6 +945,7 @@
     }
     finish(){
       if(this.result)return this.result;
+      if(this.rubik&&this.rubik.turn)return null;
       if(this.phase==='assemble'||this.phase==='aim')return null;
       if(this.level===4)return null;
       if(this.level===12){
@@ -926,6 +958,7 @@
       return this.result;
     }
     info(){
+      if(this.level===8)return root.ChallengeRubik.info(this);
       if(this.level===4)return root.ChallengeTower.info(this);
       if(this.phase==='assemble')return '从模型托盘选取至少两个零件，横向滑动可查看全部模型。点击场景中的零件后移动摆放，贴合面出现白光；电脑再次点击确认，触屏拖动后松手确认。最后点击“完成拼接”，再随机配色开始消除。';
       if(this.phase==='aim')return '拖住弹弓方块向后拉，调整方向与拉力，松手发射。左右靶各补5块；剩余 '+this.ammo.length+' 发';

@@ -3,7 +3,7 @@
   'use strict';
   const IDENTITY=[1,0,0,0,1,0,0,0,1];
   const COLORS=[[.97,.24,.32],[.64,.34,.99],[.20,.85,.50],[.22,.58,1],[1,.80,.22],[1,.44,.79],[.55,.63,.76]];
-  const NAMES=['三棱锥','圆柱体','球体','高楼营救','三棱柱','棱台','十字双环','自由拼接','啮合齿轮','投射补靶','平衡跷跷板','弹珠通道'];
+  const NAMES=['三棱锥','圆柱体','球体','高楼营救','三棱柱','棱台','十字双环','魔方消除','啮合齿轮','投射补靶','平衡跷跷板','弹珠通道'];
   const SHAPES=[['tetrahedron','三棱锥'],['cylinder','圆柱'],['sphere','球体'],['prism','三棱柱'],['frustum','棱台'],['torus','圆环']];
   const $=id=>document.getElementById(id);
   const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -14,7 +14,9 @@
       this.viewLinks=[];this.hover=[];this.hint=[];this.tiles=[];this.drawList=[];
       this.intro=app.reduceMotion?0:1.25;this.elapsed=0;this.linkTime=0;this.lastProjection='';this.pendingProjection='';this.controlsKey='';this.resultShown=false;
       this.slides=new Map();this.popEffects=[];
-      this.assembly=level===8&&g.ChallengeAssembly?new g.ChallengeAssembly(this):null;
+      this.panOffset=[0,0,0];
+      this.assembly=null;
+      this.rubikControls=level===8&&g.ChallengeRubikControls?new g.ChallengeRubikControls(this):null;
       this.thrower=level===10&&g.ChallengeThrow?new g.ChallengeThrow(this):null;
       app.score=0;app.entryScore=0;app.newRecord=false;app.target=this.world.target;
       app.state='play';app.introDone=true;app.timer=null;app.rotor=null;app.mainMatcher=null;
@@ -33,6 +35,7 @@
       g.Sfx.start();this.help(true);
     }
     dispose(){
+      this.rubikControls?.dispose();
       $('challengePanel')?.classList.add('hidden');document.body.classList.remove('in-challenge');
       $('waterGauge')?.classList.add('hidden');
       $('towerStatus')?.classList.add('hidden');
@@ -44,7 +47,7 @@
       const sc=this.app.scene;this.app.zoom=Math.max(0,Math.min(1,value));
       const radius=Math.max(1.7,Number(this.world.bounds)||3);
       const angle=Math.min(sc.fov/2,Math.atan(Math.tan(sc.fov/2)*sc.aspect));
-      this.fit=radius/Math.sin(angle)*(this.level===4?.85:this.level===11?1.0:[8,12].includes(this.level)?1.55:1.3);
+      this.fit=radius/Math.sin(angle)*(this.level===4?.85:[8,11].includes(this.level)?1.0:this.level===12?1.55:1.3);
       if([4,10,11,12].includes(this.level)){
         const points=[...this.world.cells,...this.world.decorations].flatMap(c=>g.ChallengeProjection.worldVertices({...c,size:[1,1,1]}));
         const min=[0,1,2].map(a=>Math.min(...points.map(p=>p[a]))),max=[0,1,2].map(a=>Math.max(...points.map(p=>p[a])));
@@ -57,8 +60,9 @@
           return dot(p,back)+Math.max(Math.abs(dot(p,right))/(tan*sc.aspect*.82),Math.abs(dot(p,up))/(tan*([4,10].includes(this.level)?.72:.60)));
         }))+.1;
       }
-      sc.dist=this.fit/(1+this.app.zoom*1.5);
-      const slider=$('zoomSlider');slider.value=this.app.zoom*100;slider.setAttribute('aria-valuetext',Math.round(100+150*this.app.zoom)+'%');
+      const range=sc.zoomRange;
+      sc.dist=range?1/((1-this.app.zoom)/range.far+this.app.zoom/range.near):this.fit/(1+this.app.zoom*1.5);
+      const slider=$('zoomSlider');slider.value=this.app.zoom*100;slider.setAttribute('aria-valuetext',Math.round(100*(range?range.far/sc.dist:1+1.5*this.app.zoom))+'%');
       this.lastProjection='';
     }
     refit(){
@@ -69,7 +73,16 @@
       }
       this.zoom(this.app.zoom);
     }
-    align(){this.app.scene.orbit=null;this.app.scene.yaw=0;this.app.scene.pitch=0;this.lastProjection='';}
+    align(){this.panOffset=[0,0,0];this.app.scene.orbit=null;this.app.scene.yaw=0;this.app.scene.pitch=this.level===11?.08:0;this.lastProjection='';}
+    pan(dx,dy){
+      if(this.level!==11)return false;
+      if(this.app.state!=='play'||this.intro)return true;
+      const sc=this.app.scene,scale=2*sc.dist*Math.tan(sc.fov/2)/(sc.h/sc.dpr),limit=Math.max(1,Number(this.world.bounds)||3)*.6;
+      this.panOffset[0]=Math.max(-limit,Math.min(limit,this.panOffset[0]-dx*scale));
+      const vertical=Math.max(-limit,Math.min(limit,this.panOffset[1]/Math.cos(.08)+dy*scale));
+      this.panOffset[1]=vertical*Math.cos(.08);this.panOffset[2]=-vertical*Math.sin(.08);
+      this.lastProjection='';return true;
+    }
     frame(dt){
       const app=this.app,sc=app.scene;
       this.thrower?.frame(dt);
@@ -77,23 +90,26 @@
         this.elapsed+=dt;this.intro=Math.max(0,this.intro-dt);
         if(!this.intro)this.world.update(dt);
         for(const [id,move] of this.slides){move.time+=dt;if(move.time>=.28)this.slides.delete(id);}
+        this.readMoves();
         this.popEffects=this.popEffects.filter(p=>(p.time+=dt)<.32);
         sc.particles.update(dt);
       }
+      if(this.level===11){sc.orbit=null;sc.yaw=0;sc.pitch=.08;sc.shakeT=0;}
       sc.updateCamera(dt);
       if(this.focus){const radius=Math.max(1.7,Number(this.world.bounds)||3);sc.eye=sc.eye.map((v,i)=>v+this.focus[i]);sc.target=this.focus.map((v,i)=>v-sc.up[i]*radius*(this.hasControls&&![11,12].includes(this.level)?.38:0));}
+      if(this.level===11){sc.up=[0,1,0];sc.eye=sc.eye.map((v,i)=>v+this.panOffset[i]);sc.target=sc.target.map((v,i)=>v+this.panOffset[i]);}
       this.render();
       if(app.state==='play'&&!this.intro){
-        const cameraKey=Array.from(sc.vp).map(n=>n.toFixed(4)).join(',');
+        const cameraKey=Array.from(sc.vp).map(n=>Math.abs(n)<.00005?'0.0000':n.toFixed(4)).join(',');
         this.cameraQuiet=cameraKey===this.cameraKey?(this.cameraQuiet||0)+dt:0;this.cameraKey=cameraKey;
         const key=cameraKey+'|'+this.world.cells.map(c=>c.color+':'+c.center.map(n=>n.toFixed(3)).join(',')+':'+(c.basis||IDENTITY).map(n=>n.toFixed(3)).join(',')).join(';');
         if(key!==this.pendingProjection){this.pendingProjection=key;this.linkTime=0;this.viewLinks=[];this.hover=[];this.hint=[];app.hideTip();}
         else this.linkTime+=dt;
-        if(this.slides.size){this.viewLinks=[];this.lastProjection='';this.linkTime=0;}
+        if(this.slides.size||this.world.rubik?.turn){this.viewLinks=[];this.lastProjection='';this.linkTime=0;}
         if(this.world.canRemove()&&!this.slides.size&&this.linkTime>.12&&key!==this.lastProjection){
-          this.viewLinks=g.ChallengeProjection.links(sc,this.tiles);this.lastProjection=key;
+          this.viewLinks=g.ChallengeProjection.links(sc,this.interactionTiles());this.lastProjection=key;
         }
-        if(![4,12].includes(this.level)&&this.world.canRemove()&&!this.slides.size){
+        if(![4,12].includes(this.level)&&!this.world.rubik?.turn&&this.world.canRemove()&&!this.slides.size){
           const colors=new Set();let possible=false;
           for(const c of this.world.cells){if(c.color<0||c.color>5)continue;if(colors.has(c.color)){possible=true;break;}colors.add(c.color);}
           if(!possible)this.world.finish();
@@ -118,7 +134,16 @@
       const sc=this.app.scene,m4=g.MX.m4;
       const panel=$('challengePanel'),rect=this.hasControls?panel?.getBoundingClientRect?.():null;
       const bottom=rect&&rect.top>0?Math.min(.96,rect.top/(sc.h/sc.dpr)-.02):.96;
-      sc.constrainZoom?.(this.world.cells.concat(this.world.decorations||[]),this.focus||[0,0,0],bottom);
+      let fitCells=this.world.cells.concat(this.world.decorations||[]);
+      if(this.world.sling){
+        const sling=this.world.sling,moving=new Set([...sling.bands,sling.pouch,sling.loaded]);
+        // Reserve room for a full pull before aiming starts, so the ray under
+        // a held pointer never moves in response to the pouch or rubber bands.
+        fitCells=fitCells.filter(c=>!moving.has(c)).concat({center:sling.anchor,size:[4.2,4.2,4.2]});
+      }
+      if(sc.applyZoom)sc.applyZoom(fitCells,this.level===11?sc.target:this.focus||[0,0,0],bottom,this.fit,this.app.zoom,this.level===8?44:0);
+      else sc.constrainZoom?.(this.world.cells.concat(this.world.decorations||[]),this.level===11?sc.target:this.focus||[0,0,0],bottom);
+      if(sc.zoomRange)$('zoomSlider')?.setAttribute('aria-valuetext',Math.round(100*sc.zoomRange.far/sc.dist)+'%');
       sc.beginFrame();
       this.tiles=this.world.cells.filter(c=>c.color>=0).map(c=>this.makeTile(c));
       const decor=(this.world.decorations||[]).map(c=>this.makeTile(c,true));
@@ -142,7 +167,7 @@
         if(end){const model=m4.create();m4.fromBasisScale(model,IDENTITY,end,[.14,.14,.035]);sc.drawBox(model,[1,1,1],[0,0],0,.9);}
       }
       sc.drawParticles();this.app.renderList=this.tiles;
-      this.drawLabels();
+      this.drawLabels();this.rubikControls?.render();
     }
     drawLabels(){
       const holder=$('challengeLabels');if(!holder)return;
@@ -152,8 +177,8 @@
     group(id){
       const w=this.world,start=w.cells.find(c=>c.id===id);
       if(!start||start.color<0||start.color>5||!w.canRemove()||(w.canRemoveCell&&!w.canRemoveCell(id)))return [];
-      if((w.tower||w.water||w.seesaw||w.gears)&&this.cameraQuiet>.12&&!this.slides.size&&this.pendingProjection!==this.lastProjection){
-        this.viewLinks=g.ChallengeProjection.links(this.app.scene,this.tiles);this.lastProjection=this.pendingProjection;
+      if((w.tower||w.water||w.seesaw||w.gears||w.rubik)&&this.cameraQuiet>.12&&!this.slides.size&&this.pendingProjection!==this.lastProjection){
+        this.viewLinks=g.ChallengeProjection.links(this.app.scene,this.interactionTiles());this.lastProjection=this.pendingProjection;
       }
       const stamp=w.revision??w.cells.map(c=>c.color).join(',');
       if(!this.graph||this.graph.stamp!==stamp||this.graph.links!==this.viewLinks){
@@ -169,15 +194,21 @@
       while(stack.length){for(const next of neighbors.get(stack.pop())||[]){const cell=cells.get(next);if(!seen.has(next)&&cell&&cell.color===start.color&&(!w.canRemoveCell||w.canRemoveCell(next))){seen.add(next);stack.push(next);}}}
       return Array.from(seen);
     }
-    pick(e){return this.app.scene.pick(e.clientX/innerWidth*2-1,1-e.clientY/innerHeight*2,this.tiles);}
+    interactionTiles(){
+      if(!this.world.rubik)return this.tiles;
+      // Dark cubies are opaque but never playable. Negative IDs let the shared
+      // picker stop at their surfaces without creating elimination links.
+      return this.tiles.concat(this.world.rubik.bodies.map((body,index)=>({...this.makeTile(body,true),id:-1-index,color:6,pickThrough:false})));
+    }
+    pick(e){return this.app.scene.pick(e.clientX/innerWidth*2-1,1-e.clientY/innerHeight*2,this.interactionTiles());}
     setHover(e){
-      if(this.intro||this.app.state!=='play')return;
+      if(this.intro||this.app.state!=='play'||this.world.rubik?.turn||this.slides.size)return;
       const id=this.pick(e);this.hover=this.group(id);
       if(this.hover.length>1)this.app.showTip(e.clientX,e.clientY,this.hover.length);else this.app.hideTip();
     }
     clearHover(){this.hover=[];this.app.hideTip();}
     click(e){
-      if(this.app.state!=='play'||this.intro||this.slides.size)return;
+      if(this.app.state!=='play'||this.intro||this.slides.size||this.world.rubik?.turn)return;
       if(this.world.phase==='aim')return;
       const id=this.pick(e);if(id<0)return;
       if(this.world.phase==='assemble'){const c=this.world.cells.find(c=>c.id===id);this.action('select',c.component);return;}
@@ -203,7 +234,7 @@
       $('hintStatus').textContent=this.message;this.syncHud();
     }
     action(name,value){
-      if(this.app.state!=='play'||this.intro)return;
+      if(this.app.state!=='play'||this.intro||this.world.rubik?.turn||(name==='turn'&&this.slides.size))return;
       if(name==='finish'){this.world.finish();}
       else if(name==='retry'){this.app.restart();return;}
       else {const result=this.world.action(name,value);if(typeof result==='string'){this.message=result;this.messageUntil=this.elapsed+2;this.app.toast(this.focus,result);}}
@@ -228,7 +259,9 @@
       if(this.app.state!=='play')return;
       this.app.rememberHelpReturn();
       this.app.state='paused';
-      this.app.overlay(`<h2 class="ov-title">${NAMES[this.level-1]}</h2><div class="ov-help"><p>${escape(this.world.info())}</p><p>拖动旋转，滚轮或左侧滑杆缩放。至少两个同色块共面接触时可消除，只碰角或棱不算实体相邻。视角拼接始终开启，也可转动视角让可见边缘相接。</p><p>不限时，每关从 0 分开始。点击“！”可重新查看说明，说明打开期间场景暂停。</p></div><div class="ov-actions"><button class="ov-btn" data-act="resume">我知道了</button>${!entry&&this.world.phase==='play'&&![4,12].includes(this.level)?'<button class="ov-btn plain" data-act="challengeFinish">结算本关</button>':''}</div>`);
+      const viewHelp=this.level===11?'拖动可左右、上下平移视角，正面方向固定；滚轮、双指或左侧滑杆缩放。横梁的倾斜表示真实的失衡。':'拖动旋转，滚轮或左侧滑杆缩放。视角拼接始终开启，也可转动视角让可见边缘相接。';
+      const rubikHelp=this.level===8?'白色箭头转动正对你的面上的行或列；拖动魔方查看其他面的箭头。金色箭头表示重力方向。':'';
+      this.app.overlay(`<h2 class="ov-title">${NAMES[this.level-1]}</h2><div class="ov-help"><p>${escape(this.world.info())}</p><p>${viewHelp}${rubikHelp}至少两个同色块共面接触时可消除，只碰角或棱不算实体相邻。</p><p>不限时，每关从 0 分开始。点击“！”可重新查看说明，说明打开期间场景暂停。</p></div><div class="ov-actions"><button class="ov-btn" data-act="resume">我知道了</button>${!entry&&this.world.phase==='play'&&![4,12].includes(this.level)?'<button class="ov-btn plain" data-act="challengeFinish">结算本关</button>':''}</div>`);
     }
     bindControls(){
       const panel=$('challengePanel');
@@ -240,6 +273,9 @@
         this.action(action,value);
       };
       panel.oninput=e=>{
+        if(e.target.id==='marbleAim'&&this.app.state==='play'&&!this.intro&&!this.world.marble?.released){
+          this.world.action('marble-aim',Number(e.target.value)*Math.PI/180);this.syncHud();return;
+        }
         if(e.target.dataset.aim&&this.app.state==='play'&&!this.intro){const aim={...this.world.aim};aim[e.target.dataset.aim]=Number(e.target.value);this.world.action('aim',aim);this.syncHud();}
       };
       panel.onchange=e=>{if(e.target.id==='challengeComponent')this.action('select',Number(e.target.value));};
@@ -249,15 +285,13 @@
       const key=w.phase+'|'+w.cells.length+'|'+w.selected+'|'+Boolean(w.assemblyPending)+'|'+w.marble?.released+'|'+w.marble?.drops;
       if(key===this.controlsKey)return;this.controlsKey=key;
       let html='';
-      if(w.phase==='assemble'){
+      if(w.phase==='assemble'&&this.level!==8){
         const used=new Set((w.components||[]).map(c=>c.name||c.shape));
         html=`<div class="challenge-parts" aria-label="几何体模型托盘">${SHAPES.map(([shape,label])=>button('add',`${g.ChallengeThumbnail?g.ChallengeThumbnail(shape):''}<span>${label}</span>`,`class="challenge-part" aria-label="添加${label}" data-value="${shape}" ${used.has(shape)?'disabled':''}`)).join('')}</div>`;
         const comps=w.components||[];
         html+=`<div class="challenge-tools"><label>当前零件 <select id="challengeComponent">${comps.map(c=>`<option value="${c.id}" ${c.id===w.selected?'selected':''}>${escape(SHAPES.find(s=>s[0]===(c.name||c.shape))?.[1]||c.name||'零件')} ${c.id+1}</option>`).join('')}</select></label>${button('undo','撤销')}${button('snap','吸附拼接')}${button('remove-component','移除')}${button('complete','完成拼接','class="primary"')}</div><details class="challenge-adjust"><summary>移动与旋转零件</summary><div class="challenge-tools">${['x','y','z'].map((axis,i)=>button('translate',['左','下','后'][i],`data-axis="${axis}" data-delta="-.25"`)+button('translate',['右','上','前'][i],`data-axis="${axis}" data-delta=".25"`)+button('rotate','旋转 '+axis.toUpperCase(),`data-axis="${axis}"`)).join('')}${button('reset','重置拼接')}</div></details>`;
-      }else if(this.level===11){
-        html=`<div class="challenge-tools">${button('shift','左端 ←','data-side="left" data-delta=".15"')}${button('shift','左端 →','data-side="left" data-delta="-.15"')}${button('shift','右端 ←','data-side="right" data-delta="-.15"')}${button('shift','右端 →','data-side="right" data-delta=".15"')}</div>`;
       }else if(this.level===12){
-        html=`<div class="challenge-tools">${button('release','释放弹珠',`class="primary" ${w.marble.released||w.marble.drops>=3?'disabled':''}`)}<span id="marbleStatus"></span></div>`;
+        html=`<div class="challenge-tools"><label class="marble-aim" for="marbleAim">瞄准 <output id="marbleAimValue">0°</output><input id="marbleAim" type="range" min="-50" max="50" step="1" value="${Math.round((w.marble.aimAngle||0)*180/Math.PI)}" aria-label="弹珠发射角度" ${this.app.state!=='play'||this.intro||w.marble.released||w.marble.drops>=3?'disabled':''}></label>${button('release','发射弹珠',`class="primary" ${w.marble.released||w.marble.drops>=3?'disabled':''}`)}<span id="marbleStatus"></span></div>`;
       }
       $('challengeControls').innerHTML=html;
       this.hasControls=Boolean(html);$('challengePanel').classList.toggle('hidden',!this.hasControls);
@@ -284,6 +318,9 @@
       }
       if(this.level===12&&$('marbleStatus')){
         const m=w.marble,c=COLORS[m.color];
+        const angle=Math.round((m.aimAngle||0)*180/Math.PI),aim=$('marbleAim');
+        if(aim){aim.disabled=a.state!=='play'||!!this.intro||m.released||m.drops>=3;aim.value=angle;aim.setAttribute('aria-valuetext',angle===0?'正下方':(angle<0?'向左 ':'向右 ')+Math.abs(angle)+' 度');}
+        if($('marbleAimValue'))$('marbleAimValue').textContent=angle===0?'正下方':(angle<0?'左 ':'右 ')+Math.abs(angle)+'°';
         $('marbleStatus').innerHTML='<i class="ammo-color" style="background:rgb('+c.map(v=>Math.round(v*255)).join(',')+')"></i>'+Math.min(3,m.drops+1)+' / 3 次 · 碰撞 +100 · 落槽加分';
       }
       $('waterGauge')?.classList.add('hidden');

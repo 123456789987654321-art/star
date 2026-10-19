@@ -37,10 +37,10 @@ test('paused challenge frame freezes model and introduction',()=>{
 // ray picks, projection, world rules, ChallengeGame and App run their real code.
 function integrated(level=1,acknowledge=true){
   const nodes=new Map();
-  const node=()=>({classList:{add(){},remove(){},toggle(){}},style:{},dataset:{},innerHTML:'',textContent:'',setAttribute(){},appendChild(){},remove(){}});
+  const node=()=>({classList:{add(){},remove(){},toggle(){}},style:{},dataset:{},innerHTML:'',textContent:'',setAttribute(){},addEventListener(){},appendChild(){},remove(){}});
   const document={readyState:'loading',addEventListener(){},body:node(),createElement:node,getElementById(id){if(!nodes.has(id))nodes.set(id,node());return nodes.get(id);}};
   const ctx=vm.createContext({console,document,innerWidth:800,innerHeight:800,performance:{now:()=>0},setTimeout(){},localStorage:{getItem(){return null;},setItem(){}}});ctx.window=ctx;
-  for(const file of ['mathx','board','mechanics','scene','challenge-geometry','challenge-tower','challenge-world','challenge-projection','challenge-thumbnails','challenge-assembly','challenge-throw','challenge-game','app'])vm.runInContext(fs.readFileSync('js/'+file+'.js','utf8'),ctx);
+  for(const file of ['mathx','board','mechanics','scene','challenge-geometry','challenge-tower','challenge-rubik','challenge-world','challenge-projection','challenge-thumbnails','challenge-rubik-controls','challenge-throw','challenge-game','app'])vm.runInContext(fs.readFileSync('js/'+file+'.js','utf8'),ctx);
   ctx.Sfx={start(){},pop(){},invalid(){},levelClear(){},gameOver(){}};
   const app=ctx.App,scene=Object.create(ctx.Scene.prototype);
   Object.assign(scene,{w:800,h:800,dpr:1,fov:Math.PI/4,aspect:1,time:0,shakeT:0,target:[0,0,0],vp:ctx.MX.m4.create(),invVP:ctx.MX.m4.create(),particles:{clear(){},update(){},burst(){}},drawPoly(){},drawBox(){},drawParticles(){}});
@@ -119,6 +119,15 @@ test('aim sliders preserve aim while paused or introducing and update during pla
   app.state='play';game.intro=.5;panel.oninput(input);assert.equal(game.world.aim.x,initial);
   game.intro=0;panel.oninput(input);assert.equal(game.world.aim.x,2.5);
 });
+
+test('marble angle slider aims before launch and stays locked while paused or released',()=>{
+ const {app,game,nodes}=integrated(12),panel=nodes.get('challengePanel'),m=game.world.marble;
+ assert.match(nodes.get('challengeControls').innerHTML,/marbleAim/);assert.match(nodes.get('challengeControls').innerHTML,/发射弹珠/);
+ const input={target:{id:'marbleAim',dataset:{},value:'30'}};
+ panel.oninput(input);assert.ok(Math.abs(m.aimAngle-Math.PI/6)<1e-8);
+ app.state='paused';input.target.value='-30';panel.oninput(input);assert.ok(m.aimAngle>0);
+ app.state='play';game.action('release');panel.oninput(input);assert.ok(m.aimAngle>0);
+});
 test('App starts a real challenge, advances its frame and removes the clicked projected group',()=>{
   const {app,game,scene,ctx}=seamFixture();
   assert.ok(game instanceof ctx.ChallengeGame);assert.ok(game.world instanceof ctx.ChallengeWorld);
@@ -132,6 +141,17 @@ test('an emptied challenge automatically settles after its last move',()=>{
   game.world.remove(game.world.cells.map(c=>c.id));
   game.frame(.05);
   assert.equal(game.world.result,'win');assert.equal(app.state,'clear');
+});
+
+test('Rubik scene has no tray and turn completion starts falling animations before input unlocks',()=>{
+ const {game,app,nodes}=integrated(8);
+ assert.equal(game.assembly,null);assert.ok(game.rubikControls);assert.equal(nodes.get('challengeControls').innerHTML,'');
+ const w=game.world,cell=w.cells.find(c=>c.rubikRow===14);cell.color=-1;w.revision++;
+ game.action('turn',{axis:0,layer:0,direction:1});assert.ok(w.rubik.turn);
+ const time=w.rubik.turn.time;app.state='paused';game.frame(.1);assert.equal(w.rubik.turn.time,time);
+ app.state='play';game.frame(.6);assert.equal(w.rubik.turn,null);assert.ok(game.slides.size>0);assert.equal(w.score,0);
+ game.action('turn',{axis:1,layer:0,direction:1});assert.equal(w.rubik.turn,null,'settling blocks another turn');
+ game.frame(.3);game.action('turn',{axis:1,layer:0,direction:1});assert.ok(w.rubik.turn);
 });
 
 test('returning to level selection keeps the current mode and earned progress from play or pause',()=>{
@@ -158,6 +178,31 @@ test('seesaw fits actual geometry centrally at portrait and desktop sizes',()=>{
     assert.ok(Math.max(...xs)-Math.min(...xs)>.62,'seesaw uses the available width');
     assert.ok(Math.abs((Math.min(...xs)+Math.max(...xs))/2-.5)<.02,'centered horizontally');
   }
+});
+
+test('seesaw pans without camera roll, preserves real tilt, and recenters on reset',()=>{
+ const {game,scene,nodes}=integrated(11);game.frame(0);
+ assert.equal(nodes.get('challengeControls').innerHTML,'');assert.equal(game.hasControls,false);
+ const beam=[[-2,0,0],[2,0,0]],level=()=>Math.abs(scene.project(beam[0])[1]-scene.project(beam[1])[1])<1e-5;
+ assert.ok(level());const initial=scene.project([0,0,0]);
+ assert.equal(game.pan(80,0),true);game.frame(0);assert.ok(level());assert.ok(scene.project([0,0,0])[0]>initial[0]);
+ game.pan(0,60);game.frame(0);assert.ok(level());assert.ok(scene.project([0,0,0])[1]>initial[1]);
+ const angle=.2,ends=beam.map(p=>[p[0]*Math.cos(angle),p[0]*Math.sin(angle),0]);assert.ok(Math.abs(scene.project(ends[0])[1]-scene.project(ends[1])[1])>10);
+ const offset=game.panOffset.slice();Object.assign(scene,{w:390,h:844,aspect:390/844});game.zoom(game.app.zoom);game.frame(0);assert.deepEqual(game.panOffset,offset);assert.ok(level());assert.equal(scene.orbit,null);
+ game.align();game.frame(0);assert.deepEqual(Array.from(game.panOffset),[0,0,0]);assert.ok(level());
+ const other=integrated(1);assert.equal(other.game.pan(50,20),false);other.scene.rotateOrbit(50,20);assert.ok(other.scene.orbit);
+});
+
+test('Rubik body blocks rear picking and projected matches through a front hole',()=>{
+ const {game,scene,ctx}=integrated(8),w=game.world;
+ for(const c of w.cells)c.color=-1;
+ const rear=w.cells.filter(c=>c.rubikFace===2&&c.rubikRow===7&&[7,8].includes(c.rubikCol));for(const c of rear)c.color=2;
+ scene.yaw=0;scene.pitch=0;game.frame(0);
+ const p=scene.project(rear[0].center);
+ assert.ok(scene.pick(p[0]/800*2-1,1-p[1]/800*2,game.tiles)>=0,'rear blocks intersect the hole ray');
+ assert.ok(game.pick({clientX:p[0],clientY:p[1]})<0,'opaque body stops elimination ray');
+ assert.equal(ctx.ChallengeProjection.links(scene,game.tiles).length,1,'rear pair would match without body');
+ assert.equal(ctx.ChallengeProjection.links(scene,game.interactionTiles()).length,0,'body hides rear matches');
 });
 
 
@@ -194,6 +239,44 @@ test('marble channel remains centered and uses available height without overlapp
     assert.ok(Math.min(...xs)>.07&&Math.max(...xs)<.93,'fits portrait width');
     assert.ok(Math.abs((top+bottom)/2-.5)<.03,'centered vertically');
   }
+});
+
+test('challenge zoom moves across the whole slider and wheel follows the effective range after resize',()=>{
+ for(const level of [8,11,12]){
+  const {game,scene,app,nodes}=integrated(level);game.frame(0);
+  for(const [width,height] of [[1440,900],[390,844]]){
+   Object.assign(scene,{w:width,h:height,aspect:width/height});game.zoom(0);game.frame(0);let previous=Infinity;
+   for(let step=0;step<=10;step++){game.zoom(step/10);game.frame(0);assert.ok(scene.dist<previous,`level ${level} step ${step}`);previous=scene.dist;}
+   const range=scene.zoomRange,middle=1/(.5/range.far+.5/range.near);app.setZoomFromDistance(middle);game.frame(0);
+   assert.ok(Math.abs(app.zoom-.5)<1e-6);assert.ok(Math.abs(Number(nodes.get('zoomSlider').value)-50)<1e-4);assert.ok(Math.abs(scene.dist-middle)<1e-4);
+  }
+ }
+});
+
+test('resting fit keeps the camera stable so visible matches settle',()=>{
+ const {game,scene}=integrated(1);game.zoom(.7);game.frame(0);const first=Array.from(scene.vp),distance=scene.dist;
+ for(let i=0;i<20;i++)game.frame(.016);
+ assert.deepEqual(Array.from(scene.vp),first,`camera changed at rest: ${distance} -> ${scene.dist}`);
+ assert.ok(game.linkTime>.12);assert.ok(game.viewLinks.length>0);
+});
+
+test('a held slingshot keeps its camera and releases the displayed preview exactly',()=>{
+ const {game,scene}=integrated(10);game.frame(0);const t=game.thrower,p=scene.project(game.world.sling.anchor),down={clientX:p[0],clientY:p[1],pointerId:1,button:0};
+ assert.ok(t.pointerDown(down));const drag={...down,clientX:p[0]-40,clientY:p[1]+60};t.pointerMove(drag);
+ const preview=JSON.stringify(game.world.trajectory),distance=scene.dist,camera=Array.from(scene.vp);
+ for(let i=0;i<20;i++)game.frame(.016);
+ assert.equal(scene.dist,distance);assert.deepEqual(Array.from(scene.vp),camera);
+ t.pointerUp(drag);assert.equal(JSON.stringify(game.world.projectile.path),preview);
+});
+
+test('Rubik arrows stay inside phone and desktop views with separate touch areas',()=>{
+ const {game,scene}=integrated(8);
+ for(const [width,height] of [[390,844],[1440,900]])for(const zoom of [0,1])for(const yaw of [0,.58,1.5,2.4]){
+  Object.assign(scene,{w:width,h:height,aspect:width/height,yaw,pitch:.34});game.zoom(zoom);game.frame(0);
+  const targets=game.rubikControls.targets;assert.equal(targets.length,12);
+  for(const t of targets){assert.ok(t.x>=22&&t.x<=width-22&&t.y>=22&&t.y<=height-22,'inside viewport');}
+  for(let i=0;i<targets.length;i++)for(let j=i+1;j<targets.length;j++)assert.ok(Math.abs(targets[i].x-targets[j].x)>=44||Math.abs(targets[i].y-targets[j].y)>=44,'nonoverlapping targets');
+ }
 });
 
 test('legacy challenge saves show unknown best as zero and new best persists across reload',()=>{
