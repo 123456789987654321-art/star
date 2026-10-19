@@ -200,6 +200,7 @@ canvas#gl {
          text-shadow: 0 0 18px rgba(120,180,255,.5); font-variant-numeric: tabular-nums; }
 .score-sub { font-size: 11.5px; color: #a8b6dd; margin-top: 3px; letter-spacing: .05em; }
 .score-sub span { color: #ffd76a; font-weight: 600; }
+body.in-challenge .score-sub, body.in-challenge .prog, body.in-challenge #hudStars { display: none; }
 .prog { margin-top: 6px; width: 118px; height: 5px; border-radius: 4px;
         background: rgba(255,255,255,.12); overflow: hidden; margin-left: auto; }
 .prog i { display: block; height: 100%; width: 0%;

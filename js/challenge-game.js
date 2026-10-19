@@ -36,6 +36,7 @@
       g.Sfx.start();this.help(true);
     }
     dispose(){
+      this.saveBest();
       this.rubikControls?.dispose();
       $('challengePanel')?.classList.add('hidden');document.body.classList.remove('in-challenge');
       $('waterGauge')?.classList.add('hidden');
@@ -268,18 +269,26 @@
       if(this.level===8&&['add','remove-component','reset','undo','translate','rotate','snap','complete'].includes(name))this.refit();
       this.hover=[];this.hint=[];this.lastProjection='';this.controlsKey='';this.readMoves();this.controls();this.syncHud();this.checkResult();
     }
+    saveBest(){
+      const score=this.world.score;if(!Number.isFinite(score)||score<=0)return;
+      const p=this.app.progressFor('challenge');p.best=p.best||{};
+      if(score<=(Number(p.best[this.level])||0))return;
+      p.best[this.level]=score;
+      try{g.localStorage.setItem('popstar3d.progress.challenge.v2',JSON.stringify(p));}catch(e){}
+    }
     checkResult(){
       if(this.resultShown||!this.world.result)return;
       this.resultShown=true;const won=this.world.result==='win';this.app.state=won?'clear':'over';
       this.app.score=this.world.score;this.app.target=this.world.target;this.app.hideTip();
+      this.saveBest();
       if(won){
-        const p=this.app.progressFor('challenge');p.cleared[this.level]=0;p.next=Math.min(13,Math.max(p.next,this.level+1));p.score=0;
+        const p=this.app.progressFor('challenge');p.cleared[this.level]=0;p.next=Math.min(12,Math.max(p.next,this.level+1));p.score=0;
         p.best=p.best||{};
         p.best[this.level]=Math.max(Number(p.best[this.level])||0,this.world.score);
         try{g.localStorage.setItem('popstar3d.progress.challenge.v2',JSON.stringify(p));}catch(e){}
         g.Sfx.levelClear();
       }else g.Sfx.gameOver();
-      this.app.overlay(`<h2 class="ov-title ${won?'win':'lose'}">${won?'本关通过':'再试一次'}</h2><p class="ov-sub">第 ${this.level} 关 · ${NAMES[this.level-1]}</p><div class="ov-rows"><div class="ov-row big"><span>本关得分</span><b>${this.world.score}</b></div><div class="ov-row"><span>本关目标</span><b>${this.world.target}</b></div></div><p class="ov-sub">${escape(this.world.status)}</p><div class="ov-actions">${won&&this.level<11?'<button class="ov-btn" data-act="next">下一关 · 从 0 分开始</button>':''}<button class="ov-btn plain" data-act="restart">重玩本关</button><button class="ov-btn plain" data-act="challengeSelect">返回挑战选关</button></div>`);
+      this.app.overlay(`<h2 class="ov-title ${won?'win':'lose'}">本关结束</h2><p class="ov-sub">第 ${this.level} 关 · ${NAMES[this.level-1]}</p><div class="ov-rows"><div class="ov-row big"><span>本关得分</span><b>${this.world.score}</b></div></div><p class="ov-sub">${escape(this.world.status)}</p><div class="ov-actions">${this.level<11?'<button class="ov-btn" data-act="next">下一关 · 从 0 分开始</button>':''}<button class="ov-btn plain" data-act="restart">重玩本关</button><button class="ov-btn plain" data-act="challengeSelect">返回挑战选关</button></div>`);
     }
     help(entry=false){
       if(this.app.state!=='play')return;
@@ -320,11 +329,12 @@
       this.hasControls=Boolean(html);$('challengePanel').classList.toggle('hidden',!this.hasControls);
     }
     syncHud(){
+      this.saveBest();
       const w=this.world,a=this.app;a.score=w.score;a.target=w.target;
       $('hudMode').textContent='挑战 · '+NAMES[this.level-1];$('hudLevel').textContent=this.level;
-      $('hudScore').textContent=w.score;$('hudTarget').textContent=w.phase==='assemble'?'拼接后设定':w.target;$('hudRemain').textContent=w.phase==='assemble'?w.cells.length:w.remaining();
-      $('hudTimerBox').classList.add('hidden');$('progFill').style.width=Math.min(100,w.score/Math.max(1,w.target)*100)+'%';
-      $('hudStars').innerHTML=[.5,1,1.5].map(t=>'<i class="'+(w.score>=w.target*t?'on':'')+'">★</i>').join('');
+      $('hudScore').textContent=w.score;$('hudTarget').textContent='';$('hudRemain').textContent=w.phase==='assemble'?w.cells.length:w.remaining();
+      $('hudTimerBox').classList.add('hidden');$('progFill').style.width='0%';
+      $('hudStars').innerHTML='';
       if(this.messageUntil&&this.elapsed>this.messageUntil)this.message='';
       $('hintStatus').textContent=this.message||w.status||'';
       if($('throwGauge')){

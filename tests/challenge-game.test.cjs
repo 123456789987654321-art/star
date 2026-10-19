@@ -207,7 +207,7 @@ test('Rubik body blocks rear picking and projected matches through a front hole'
 });
 
 
-test('challenge picker retains only highest successful score and every replay starts at zero',()=>{
+test('challenge picker retains highest score including failed attempts and every replay starts at zero',()=>{
   const {app,game,nodes}=integrated(10);
   const normal=JSON.stringify(app.progressFor('normal'));
   game.world.score=480;game.world.result='win';game.checkResult();
@@ -217,11 +217,17 @@ test('challenge picker retains only highest successful score and every replay st
   assert.equal(app.progressFor('challenge').best[10],480);
   app.restart();assert.equal(app.score,0);assert.equal(app.challenge.world.score,0);
   app.challenge.world.score=900;app.challenge.world.result='lose';app.challenge.checkResult();
-  assert.equal(app.progressFor('challenge').best[10],480);
+  assert.equal(app.progressFor('challenge').best[10],900);
   app.restart();app.challenge.world.score=600;app.challenge.world.result='win';app.challenge.checkResult();
-  assert.equal(app.progressFor('challenge').best[10],600);
+  assert.equal(app.progressFor('challenge').best[10],900);
   assert.equal(app.progressFor('challenge').score,0);assert.equal(app.progressFor('challenge').cleared[10],0);
   assert.equal(JSON.stringify(app.progressFor('normal')),normal);
+});
+test('challenge can end below the old target and keeps an unfinished high score',()=>{
+ const {app,game,nodes}=integrated(1);game.world.score=20;game.syncHud();app.returnToLevelSelect();
+ assert.equal(app.progressFor('challenge').best[1],20);assert.match(nodes.get('ovCard').innerHTML,/历史最高分：20/);
+ app.startSelectedLevel('challenge',1);app.resume();app.challenge.world.finish();app.challenge.checkResult();
+ assert.equal(app.challenge.world.result,'win');assert.doesNotMatch(nodes.get('ovCard').innerHTML,/本关目标|分数不足/);
 });
 
 test('help return closes menu help and resumes gameplay without choosing a level',()=>{

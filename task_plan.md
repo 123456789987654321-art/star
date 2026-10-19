@@ -85,3 +85,8 @@ Zoom correction complete:189 tests, all54 desktop/mobile maximum-zoom cases and 
 - Challenge picker and public launch validation now expose only levels1-11; final-level navigation stops at11.
 - Old saved level12 clear/best entries are ignored, completed next pointers cannot reopen the removed level.
 - Updated campaign docs and browser coverage. Final214 tests pass; eleven-level Edge regression report errors=[] and failed=[].
+
+## Challenge free-score mode
+- Removed target score gates and challenge target/progress/star displays; result panels show earned score only.
+- Every attempt updates per-level highest score, including unfinished exits, retries and scene failures; picker retains max-only record.
+- Rescue scene hazards and normal-mode targets preserved.216 tests pass; browser errors=[]/failed=[]; independent review found no functional issues.

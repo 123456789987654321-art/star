@@ -39,7 +39,7 @@
       this.trajectory=[];
       this.history=[];
       this._build();
-      this.target=level===12?1500:level===4?500:Math.max(100,Math.round(this.cells.length*3/50)*50);
+      this.target=level===12?1500:null;
     }
     _cell(center,poly,component,extra={
     }){
@@ -968,7 +968,7 @@
         this.result=this.score>=this.target?'win':'lose';this.phase='finished';return this.result;
       }
       this.score+=Math.max(0,1000-this.remaining()*20);
-      this.result=this.score>=this.target?'win':'lose';
+      this.result='win';
       this.phase='finished';
       return this.result;
     }
