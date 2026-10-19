@@ -9,8 +9,8 @@ test('aim preview uses real collision physics without changing the live game',()
  assert.deepEqual(last,path.at(-1));assert.ok(w.marble.collisionCount>0||w.marble.bin!==null||Math.abs(last[0])>2.6);
 });
 test('long marble board uses closed triangular solids and only shared edges connect',()=>{
- const w=fresh();assert.ok(w.cells.length>=200);assert.ok(w.cells.every(c=>c.poly.vertices.length===6));
- const ys=w.cells.map(c=>c.center[1]);assert.ok(Math.max(...ys)-Math.min(...ys)>8);
+ const w=fresh();assert.ok(w.cells.length>=60);assert.ok(w.cells.every(c=>c.poly.vertices.length===6));
+ const ys=w.cells.map(c=>c.center[1]);assert.ok(Math.max(...ys)-Math.min(...ys)>7);
  const edges=w.contacts();assert.ok(edges.some(([a,b])=>a===0&&b===1));
  const a=w.cells[0],b=w.cells.find(c=>c.grid[0]===1&&c.grid[1]===1&&c.grid[2]===0);
  assert.ok(!edges.some(e=>e.includes(a.id)&&e.includes(b.id)));
@@ -53,7 +53,17 @@ test('launcher angle changes ball direction and is locked during flight',()=>{
  for(const direction of [-1,1]){const w=fresh(),m=w.marble;w.cells.forEach(c=>c.color=-1);assert.equal(w.action('marble-aim',direction*.6),true);assert.equal(m.aimAngle,direction*.6);const x=m.position[0];w.action('release');assert.ok(m.velocity[0]*direction>0);assert.ok(m.velocity[1]<0);assert.equal(w.action('marble-aim',0),false);w.update(.1);assert.ok((m.position[0]-x)*direction>0);}
  const w=fresh(),m=w.marble;assert.equal(m.launcher.length,4);w.action('marble-aim',10);assert.equal(m.aimAngle,m.maxAimAngle);assert.ok(m.launcher.some(p=>Math.abs(p.basis[1])>.5));assert.deepEqual(w.ballVisual[0].center,m.position);assert.equal(w.action('marble-aim',NaN),false);
 });
-test('intact obstacles and exact apex impacts cannot trap a ball indefinitely',()=>{
- for(const angle of [-.6,0,.6]){const w=fresh();w.action('marble-aim',angle);w.action('release');for(let i=0;i<2500&&w.marble.released;i++)w.update(.01);assert.equal(w.marble.drops,1,'intact board descent '+angle);}
- const w=fresh();w.cells=w.cells.slice(0,2);const points=w.cells.flatMap(c=>w._vertices(c).slice(0,3)),apex=points.reduce((a,b)=>a[1]>b[1]?a:b);w.action('release');w.marble.position=[apex[0],apex[1]+.5,0];w.marble.velocity=[0,-1,0];for(let i=0;i<2000&&w.marble.released;i++)w.update(.01);assert.equal(w.marble.drops,1);
+test('intact gate requires clearing, resting cannot farm points, and removing in flight opens the route',()=>{
+ for(const angle of [-.6,0,.6]){const w=fresh();w.action('marble-aim',angle);w.action('release');for(let i=0;i<1500;i++)w.update(.01);
+  assert.equal(w.marble.drops,0);assert.ok(w.marble.position[1]>3.5);const score=w.score;for(let i=0;i<500;i++)w.update(.01);assert.equal(w.score,score);
+  assert.equal(w.canRemove(),true);w.remove(w.cells.filter(c=>c.gate===0).map(c=>c.id));for(let i=0;i<1000;i++)w.update(.01);assert.ok(w.marble.position[1]<3.5);
+ }
+});
+test('an isolated pointed guide cannot trap a ball on its apex',()=>{
+ const w=fresh();w.cells=w.cells.filter(c=>c.role==='guide').slice(0,2);const points=w.cells.flatMap(c=>w._vertices(c).slice(0,3)),apex=points.reduce((a,b)=>a[1]>b[1]?a:b);w.action('release');w.marble.position=[apex[0],apex[1]+.5,0];w.marble.velocity=[0,-1,0];for(let i=0;i<2000&&w.marble.released;i++)w.update(.01);assert.equal(w.marble.drops,1);
+});
+test('choosing which side to clear changes the actual landing bin at identical launch angle',()=>{
+ const bins=[];
+ for(const col of [2,3]){const w=fresh();w.remove(w.cells.filter(c=>c.gate!==0||c.grid[0]===col).map(c=>c.id));w.action('release');for(let i=0;i<2000&&w.marble.released;i++)w.update(.01);assert.equal(w.marble.drops,1);bins.push(w.marble.lastBin);}
+ assert.deepEqual(bins,[1,3]);
 });

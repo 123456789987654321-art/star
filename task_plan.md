@@ -74,3 +74,9 @@ Zoom correction complete:189 tests, all54 desktop/mobile maximum-zoom cases and 
 - Direct mouse/touch launcher drag adjusts fixed-speed launch angle; isolated real physics generates white first-impact preview; button fires.
 - Challenge Hint centers and enlarges a removable group with white glow and bounce; repeated clicks preserve highlight and removal restores zoom.
 - Independent review completed and repeated-hint issue fixed. Final 214 tests pass; Edge desktop/touch report errors=[] and failed=[].
+
+## Level 12 clear-path gameplay complete
+- Five sealed removable gates and eight guide wedges replace isolated pegs; real openings control descent and side choice changes landing bin.
+- Flight-time elimination, three-ball persistent holes, all previous scoring and fixed-angle launcher retained.
+- Hint prioritizes a nearby forward group; blocked ball prompts opening a route.
+- 216 tests pass; desktop/mobile browser actual input checks pass. Independent review found no issues; 21-angle gate blocking/rest-score sweep passed. Authorized star/main upload follows.

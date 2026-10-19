@@ -832,18 +832,19 @@
     }
     _marbleBuild(){
       this.bounds=6.3;
-      const step=.65,width=.32,height=.44;
-      // Larger matching halves have a visible seam; staggered gaps preserve bounce routes.
-      for(let y=0;y<14;y++)for(let x=0;x<8;x++){
-       const middle=(x-3.5)*.59+(y%2?.10:-.10),bottom=4.25-y*step;
-       const color=(Math.floor(this.rng()*6)+x+3*y)%6;
+      // Five sealed sawtooth gates: clearing a shared-edge pair opens a real route.
+      // Sparse wedges between gates can be kept to steer or removed to drop straight.
+      const wedge=(middle,bottom,width,height,x,y,gate,role)=>{
+       const color=(Math.floor(this.rng()*6)+x+2*y)%6;
        for(let t=0;t<2;t++){
         const points=t===0?[[middle-width/2,bottom],[middle,bottom],[middle,bottom+height]]:[[middle,bottom],[middle+width/2,bottom],[middle,bottom+height]];
         const center=[points.reduce((n,p)=>n+p[0],0)/3,points.reduce((n,p)=>n+p[1],0)/3,0];
         const vertices=[-.1,.1].flatMap(z=>points.map(p=>[p[0]-center[0],p[1]-center[1],z]));
-        this._cell(center,{vertices,faces:[[0,2,1],[3,4,5],[0,1,4,3],[1,2,5,4],[2,0,3,5]]},0,{grid:[x,y,t],color});
+        this._cell(center,{vertices,faces:[[0,2,1],[3,4,5],[0,1,4,3],[1,2,5,4],[2,0,3,5]]},0,{grid:[x,y,t],color,gate,role});
        }
-      }
+      };
+      for(let y=0;y<5;y++)for(let x=0;x<6;x++)wedge((x-2.5)*.9,3.65-y*1.85,.9,.6,x,y,y,'gate');
+      for(let y=0;y<4;y++)for(const x of [0,5])wedge((y%2?1:-1)*(x===0?.85:1.95),2.55-y*1.85,.85,.55,x,y,-1,'guide');
       this.marble={position:[0,5.08,0],velocity:[0,0,0],released:false,bin:null,lastBin:null,drops:0,totalDrops:3,color:0,collisionCount:0,contacts:new Set(),aimAngle:0,maxAimAngle:Math.PI*50/180,launcherPivot:[0,5.3,0],launcher:[]};
       // Subdivide a round octahedron independently of the voxel scenery.
       const vertices=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
@@ -871,7 +872,7 @@
     }
     _marblePrepare(){
       const m=this.marble;
-      m.position=[0,5.25,0];m.velocity=[0,0,0];m.released=false;m.bin=null;m.contacts.clear();
+      m.position=[0,5.25,0];m.velocity=[0,0,0];m.released=false;m.bin=null;m.contacts.clear();m.stillTime=0;
       m.color=Math.max(0,Math.min(4,Math.floor(this.rng()*5)));
       for(const d of this.ballVisual){d.center=m.position.slice();d.rgb=PALETTE[m.color];}
       this._marbleLauncher();
@@ -895,6 +896,7 @@
     }
     _marbleUpdate(dt){
       const m=this.marble;if(!m.released||m.bin!==null)return;
+      const start=m.position.slice();
       const radius=.13,steps=Math.max(1,Math.ceil(dt/.006));
       for(let s=0;s<steps;s++){
         const h=dt/steps;
@@ -943,6 +945,7 @@
         }
       }
       for(const d of this.ballVisual)d.center=add(m.position,d.local);
+      m.stillTime=m.released&&Math.hypot(m.position[0]-start[0],m.position[1]-start[1])<.002?(m.stillTime||0)+dt:0;
     }
     update(dt){
       if(this.result||!(dt>0))return;
@@ -976,7 +979,7 @@
       if(this.phase==='aim')return '拖住弹弓方块向后拉，调整方向与拉力，松手发射。左右靶各补5块；剩余 '+this.ammo.length+' 发';
       if(this.level===9)return this.gears.moving?'齿轮转动中，请等待停靠':'齿轮停靠，可跨接触面消除';
       if(this.level===11)return '左侧 '+this.seesaw.leftCount+' 块 · 右侧 '+this.seesaw.rightCount+' 块 · 分差不超过12保持平衡；当前消除 ×'+this.seesaw.multiplier;
-      if(this.level===12)return '每个尖头障碍由两个同色三角块组成，中间有清晰拼缝，点击即可配对消除；提示会定位并以白光跳动标出组合。按住顶部发射器左右拖动调整角度，白色箭头指向首次碰撞位置，力度固定，再点击发射弹珠。共三次，每次撞击加 100 分，落槽额外加 100、300 或 500 分，达到 1500 分过关；弹珠下落时仍可消除障碍。';
+      if(this.level===12)return '消除开路，弹珠得分：五段障碍墙需要消除同色共边块才能打开通路，墙间的斜块可以保留用于反弹导向。发射前可以规划路线，发射后仍能随时消除，球被挡住时继续开路。三颗球共用棋盘，已打开的缺口不会恢复。按住顶部发射器左右拖动调角，白色箭头预览首次碰撞，固定力度，点击按钮发射。消除照常得分，每次碰撞加100分，落槽加100、300或500分，三次结束达到1500分过关。提示会定位并以白光跳动标出组合。';
       return '消除相邻同色块；可旋转视角寻找可见接缝';
     }
   }

@@ -44,7 +44,7 @@ test('seesaw can bring opposing assemblies into physical contact',()=>{const w=w
 
 test('gears and crossed rings provide real cross-component physical contacts',()=>{for(const n of [7,9]){const w=world(n);assert.ok(w.contacts().some(([a,b])=>w.cells[a].component!==w.cells[b].component));}});
 test('marble starts with physically adjacent removable same-color blocks',()=>{const w=world(12);assert.ok(w.contacts().some(([a,b])=>w.cells[a].color===w.cells[b].color));});
-test('a narrow cleared triangle channel lets all three balls pass while other blocks remain',()=>{const w=world(12);const ids=w.cells.filter(c=>c.grid[0]===3||c.grid[0]===4).map(c=>c.id);w.remove(ids);assert.ok(w.remaining()>150);for(let drop=0;drop<3;drop++){w.action('release');for(let i=0;i<500&&w.marble.released;i++)w.update(.02);assert.equal(w.marble.lastBin,2);assert.equal(w.marble.drops,drop+1);}assert.equal(w.result,'win');});
+test('a narrow cleared triangle channel lets all three balls pass while other blocks remain',()=>{const w=world(12);const ids=w.cells.filter(c=>c.grid[0]===2||c.grid[0]===3).map(c=>c.id);w.remove(ids);assert.ok(w.remaining()>40);for(let drop=0;drop<3;drop++){w.action('release');for(let i=0;i<500&&w.marble.released;i++)w.update(.02);assert.equal(w.marble.lastBin,2);assert.equal(w.marble.drops,drop+1);}assert.equal(w.result,'win');});
 test('shot block touches target and later shots stack on actual impact surface',()=>{
   const w=world(10),c=w.cells.find(c=>c.color>=0&&c.ring===9);
   w.action('aim',{x:c.center[0],y:c.center[1]});w.action('shoot');w.update(2);

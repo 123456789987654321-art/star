@@ -104,6 +104,14 @@ const evaluate=async expression=>{const r=await call('Runtime.evaluate',{express
   await evaluate(`qaEnter(12);App.challenge.intro=0;`);await delay(400);await evaluate(`App.showHint();`);await delay(400);
   results.push(await evaluate(`(()=>{const g=App.challenge,p=g.hintFocus&&App.scene.project(g.hintFocus);return {marbleHintPair:g.hint.length>=2,marbleHintCentered:!!p&&Math.abs(p[0]-innerWidth/2)<2&&Math.abs(p[1]-innerHeight/2)<2};})()`));
   fs.writeFileSync(path.join(out,mobile?'marble-touch-hint.png':'marble-hint.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+  await evaluate(`qaEnter(12);App.challenge.intro=0;App.challenge.action('release');for(let i=0;i<300;i++)App.challenge.world.update(.02);window.qaGateY=App.challenge.world.marble.position[1];window.qaGateCount=App.challenge.world.remaining();`);await delay(300);
+  results.push(await evaluate(`({intactGateBlocks:App.challenge.world.marble.drops===0&&qaGateY>3.5})`));
+  await evaluate(`App.showHint();`);await delay(350);
+  const gatePoint=await evaluate(`(()=>{const g=App.challenge,c=g.world.cells.find(c=>c.id===g.hint[0]),p=App.scene.project(c.center);return {x:p[0],y:p[1]};})()`);
+  if(mobile){await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[gatePoint]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});}
+  else{await call('Input.dispatchMouseEvent',{type:'mousePressed',...gatePoint,button:'left',clickCount:1});await call('Input.dispatchMouseEvent',{type:'mouseReleased',...gatePoint,button:'left',clickCount:1});}
+  await delay(150);results.push(await evaluate(`(()=>{const g=App.challenge;for(let i=0;i<300;i++)g.world.update(.02);return {gateClearedDuringFlight:g.world.remaining()<qaGateCount,openedGateAllowsDescent:g.world.marble.position[1]<qaGateY-.7};})()`));
+  await delay(150);fs.writeFileSync(path.join(out,mobile?'marble-touch-open-gate.png':'marble-open-gate.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
  }
  await call('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
  for(const level of [1,3,7,8,11,12])results.push(await evaluate(`(()=>{qaEnter(${level});const g=App.challenge;g.intro=0;const distances=[];for(const v of [0,.25,.5,.75,1]){App.setZoom(v);g.frame(.001);distances.push(App.scene.dist);}return {zoomLevel:${level},wholeSliderChanges:distances.every((d,i)=>i===0||d<distances[i-1]-.001)};})()`));

@@ -241,8 +241,12 @@
     hintGroup(){
       if(this.app.state!=='play'||this.intro)return;
       if(this.hintFocus&&this.hint.length&&this.cameraQuiet<.12)return;
-      let best=[];const seen=new Set();
-      for(const c of this.world.cells){if(c.color<0||seen.has(c.id))continue;const group=this.group(c.id);group.forEach(id=>seen.add(id));if(group.length>best.length)best=group;}
+      let best=[],bestRank=-Infinity;const seen=new Set(),ball=this.world.marble?.position;
+      for(const c of this.world.cells){
+        if(c.color<0||seen.has(c.id))continue;const group=this.group(c.id);group.forEach(id=>seen.add(id));if(group.length<2)continue;
+        const rank=ball?(c.center[1]>ball[1]+.3?-100:0)-Math.hypot(c.center[0]-ball[0],c.center[1]-ball[1]):group.length;
+        if(rank>bestRank){best=group;bestRank=rank;}
+      }
       this.hint=best.length>1?best:[];
       if(this.hint.length){
         if(!this.hintFocus)this.hintZoom=this.app.zoom;
@@ -337,7 +341,8 @@
       }
       if(this.level===12&&$('marbleStatus')){
         const m=w.marble,c=COLORS[m.color];
-        $('marbleStatus').innerHTML='<i class="ammo-color" style="background:rgb('+c.map(v=>Math.round(v*255)).join(',')+')"></i>'+Math.min(3,m.drops+1)+' / 3 次 · 碰撞 +100 · 落槽加分';
+        const route=m.released?(m.stillTime>.7?'前路受阻，消除附近同色块开路':'弹珠行进中，可继续消除开路'):'先消除开口，保留斜面引导反弹';
+        $('marbleStatus').innerHTML='<i class="ammo-color" style="background:rgb('+c.map(v=>Math.round(v*255)).join(',')+')"></i>'+Math.min(3,m.drops+1)+' / 3 次 · '+route;
       }
       $('waterGauge')?.classList.add('hidden');
       const towerStatus=$('towerStatus');
