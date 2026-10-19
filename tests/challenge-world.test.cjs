@@ -33,6 +33,11 @@ test('removal scores unique cells and never awards removed slots again',()=>{con
 test('gears lock removal while rotating but never remove automatically',()=>{const w=world(9),n=w.remaining();w.update(2.5);assert.equal(w.gears.moving,true);assert.equal(w.remove(w.cells.slice(0,3).map(c=>c.id)).length,0);assert.equal(w.remaining(),n);w.update(.8);assert.equal(w.gears.moving,false);});
 test('shot follows preview, finite ammunition leads to elimination',()=>{const w=world(10),n=w.ammo.length;assert.ok(n>0);const expected=w.trajectory.at(-1).slice();w.action('shoot');for(let i=0;i<100;i++)w.update(.02);assert.ok(w.lastImpact.every((v,i)=>Math.abs(v-expected[i])<1e-6));for(let j=1;j<n;j++){w.action('shoot');for(let i=0;i<100;i++)w.update(.02);}assert.equal(w.ammo.length,0);assert.equal(w.phase,'play');});
 test('seesaw starts balanced and responds to removed mass',()=>{const w=world(11);assert.equal(w.seesaw.angle,0);w.remove(w.cells.filter(c=>c.side==='left').slice(0,20).map(c=>c.id));w.update(.1);assert.notEqual(w.seesaw.angle,0);w.action('shift',{side:'left',delta:-100});assert.ok(w.seesaw.left>=.55);});
+test('seesaw assemblies start flush against both end stops and stay there while balanced',()=>{
+ const w=world(11),edge=side=>{const xs=w.cells.filter(c=>c.side===side&&c.component%3===0).flatMap(c=>w._vertices(c).map(p=>p[0]));return side==='left'?Math.min(...xs):Math.max(...xs);};
+ assert.ok(Math.abs(edge('left')-(-3.72+.08))<1e-8);assert.ok(Math.abs(edge('right')-(3.72-.08))<1e-8);
+ w.update(2);assert.ok(Math.abs(edge('left')+3.64)<1e-8);assert.ok(Math.abs(edge('right')-3.64)<1e-8);assert.equal(w.seesaw.angle,0);
+});
 test('three marble drops through a cleared board land in the central bin',()=>{const w=world(12);w.remove(w.cells.map(c=>c.id));for(let drop=0;drop<3;drop++){w.action('release');for(let i=0;i<500&&w.marble.released;i++)w.update(.02);assert.equal(w.marble.lastBin,2);assert.equal(w.marble.drops,drop+1);if(drop<2)assert.equal(w.result,null);}assert.equal(w.result,'win');});
 
 test('marble collides with remaining physical blocks',()=>{const w=world(12);w.action('release');for(let i=0;i<70;i++)w.update(.01);assert.ok(w.marble.position[1]>2.2);assert.equal(w.result,null);});

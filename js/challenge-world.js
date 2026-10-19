@@ -118,9 +118,9 @@
       if(n===10)this._targetBuild();
       if(n===11){
         this.seesaw={
-          angle:0,left:2.05,right:2.05,groupPositions:{left:-2.05,right:2.05},leftCount:0,rightCount:0,balanced:true,multiplier:1.2,imbalanceTime:0,moving:false
+          angle:0,left:3.09,right:3.09,groupPositions:{left:-3.09,right:3.09},leftCount:0,rightCount:0,balanced:true,multiplier:1.2,imbalanceTime:0,moving:false
         };
-        for(const side of ['left','right'])for(let j=0; j<3; j++)this._shape(['box','cylinder','prism'][j],.55,[(side==='left'?-1:1)*2.05,j*1.1+.55,0],I,{
+        for(const side of ['left','right'])for(let j=0; j<3; j++)this._shape(['box','cylinder','prism'][j],.55,[this.seesaw.groupPositions[side],j*1.1+.55,0],I,{
           side
         });
         this.beam=this._box([0,-.12,0],[3.8,.12,.8],[.38,.48,.58]);
