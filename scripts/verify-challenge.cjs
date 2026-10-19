@@ -46,8 +46,12 @@ const evaluate=async expression=>{const r=await call('Runtime.evaluate',{express
  results.push(await evaluate(`({throwReleased:!App.challenge.thrower.charging,throwConsumesOne:App.challenge.world.ammo.length===qaAmmo-1,slingFollowsPreview:JSON.stringify(App.challenge.world.projectile?.path)===qaThrowPreview})`));
  results.push(await evaluate(`(()=>{qaEnter(10);const g=App.challenge;g.intro=0;const hole=g.world.cells.find(c=>c.hole);g.action('aim',{x:hole.center[0],y:hole.center[1]});g.action('shoot');g.world.update(1.3);const filled=hole.color>=0;while(g.world.ammo.length){g.action('shoot');g.world.update(1.3);}return {targetHoleFilled:filled,targetElimination:g.world.phase==='play'};})()`));
  await evaluate(`qaEnter(4);App.challenge.intro=0;document.getElementById('banner').classList.remove('show');`);await delay(200);
- results.push(await evaluate(`({towerReady:!!App.challenge.world.tower,towerPersonAlive:App.challenge.world.tower.person.alive,towerFiveFloors:App.challenge.world.tower.floors.length===5})`));
+ results.push(await evaluate(`({towerReady:!!App.challenge.world.tower,towerPersonAlive:App.challenge.world.tower.person.alive,towerSixFloors:App.challenge.world.tower.floors.length===6,towerFourCornerPillars:App.challenge.world.tower.floorSupports.every(columns=>columns.length===4&&columns.every(ids=>ids.length===36)),towerLayerCount:App.challenge.world.tower.floors.every(ids=>ids.length===145)})`));
  fs.writeFileSync(path.join(out,'tower-initial.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+  results.push(await evaluate(`(()=>{const w=App.challenge.world,l=w.tower.levels[5],sc=App.scene,view=[sc.yaw,sc.pitch];w.remove(l.columnIds.slice(0,2).flat().filter(id=>w.cells.find(c=>c.id===id).towerRow===3));w.update(.8);return {towerTiltsOnAdjacentLoss:l.angle>.01,towerViewUnchanged:sc.yaw===view[0]&&sc.pitch===view[1]};})()`));
+  await delay(100);fs.writeFileSync(path.join(out,'tower-tilt.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+  results.push(await evaluate(`(()=>{qaEnter(4);const g=App.challenge,w=g.world,l=w.tower.levels[5];g.intro=0;const y=w.tower.person.y;w.remove([l.baseId]);w.update(1/60);return {towerBaseReleasesPerson:w.tower.person.y<y};})()`));
+  await evaluate(`qaEnter(4);App.challenge.intro=0;document.getElementById('banner').classList.remove('show');`);
  await evaluate(`window.qaTowerFloors=App.challenge.world.tower.floors.slice().reverse();for(const ids of qaTowerFloors.slice(0,2)){App.challenge.world.remove(ids);App.challenge.world.update(2);}App.challenge.syncHud();`);await delay(100);
  results.push(await evaluate(`({towerMidwayAlive:App.challenge.world.tower.person.alive&&!App.challenge.world.result,towerMidwayDescended:App.challenge.world.tower.person.y<2&&App.challenge.world.tower.person.y>App.challenge.world.tower.groundY})`));
  fs.writeFileSync(path.join(out,'tower-midway.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
@@ -83,9 +87,9 @@ const evaluate=async expression=>{const r=await call('Runtime.evaluate',{express
  }
  await call('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
  await evaluate(`qaEnter(4);App.challenge.intro=0;App.scene.yaw=-.65;App.scene.pitch=.35;document.getElementById('banner').classList.remove('show');`);await delay(200);
- results.push(await evaluate(`(()=>{const g=App.challenge,w=g.world;w.remove(w.tower.floors.slice(-2).flat());w.update(3);g.checkResult();return {towerFallFailure:w.result==='lose'&&w.tower.failure==='fall',towerFallPersonDead:!w.tower.person.alive};})()`));
+ results.push(await evaluate(`(()=>{const g=App.challenge,w=g.world;w.remove(w.tower.floors.flat());w.update(4);g.checkResult();return {towerFallFailure:w.result==='lose'&&w.tower.failure==='fall',towerFallPersonDead:!w.tower.person.alive};})()`));
  await delay(100);fs.writeFileSync(path.join(out,'tower-fall.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
- results.push(await evaluate(`(()=>{qaEnter(4);const g=App.challenge,w=g.world;g.intro=0;w.remove(w.tower.roofSupports.flat());w.update(3);g.checkResult();return {towerCrushFailure:w.result==='lose'&&w.tower.failure==='crush',towerCrushPersonDead:!w.tower.person.alive};})()`));
+ results.push(await evaluate(`(()=>{qaEnter(4);const g=App.challenge,w=g.world;g.intro=0;const lower=w.tower.levels[4],person=w.tower.person;person.y=lower.originalY+.6;person.fallStart=person.y;person.supportId=lower.upperIds[103];w.remove(w.tower.levels[5].columnIds.flat());w.update(1.5);g.checkResult();return {towerCrushFailure:w.result==='lose'&&w.tower.failure==='crush',towerCrushPersonDead:!w.tower.person.alive};})()`));
  await delay(100);fs.writeFileSync(path.join(out,'tower-crush.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
  if(process.env.ZOOM_QA){
   for(const [width,height] of [[1280,900],[390,844]]){

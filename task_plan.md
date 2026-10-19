@@ -55,3 +55,9 @@ Zoom correction complete:189 tests, all54 desktop/mobile maximum-zoom cases and 
 - Confirmed: level4 replaces water with a tower rescue. Paired colored slabs/columns are removable; fixed gray solids remain; excessive fall or crushing loses, safe ground arrival wins.
 - Confirmed: level10 stays a separate target level, switches to drag-back slingshot, with exactly5 holes on EACH target and10 shots total. No timed charging.
 - Core modules and integration complete. Final190 Node tests passed; real Edge QA errors=[]/failed=[], including independent tower win/fall/crush and actual slingshot pointer drag. Desktop sling and mobile tower screenshots visually checked; independent review no blockers. Ready for automatic upload.
+
+## Fourth challenge: six-floor, four-corner tower revision
+- User confirmed this changes the existing fourth challenge, 高楼营救.
+- Six 8×9 floors, each with two independent cube layers above one complete support plate; four 3×3×4 corner pillars, with varying immutable pillars.
+- Single/diagonal loss stays level; same-side or three-corner loss tilts; stumps catch plates and missing pillars allow collapse onto lower floors. Removing a base immediately releases cubes and the person.
+- Implemented and reviewed; all 194 tests passed, including 12 tower regressions. Final desktop/mobile browser report has no errors or failed checks. Automatic star/main upload follows.
