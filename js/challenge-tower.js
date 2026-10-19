@@ -25,7 +25,7 @@
    const l={index:k,baseId:null,upperIds:[],columnIds:[],angle:0,axis:null,direction:0,velocity:0,originalY:baseY};
    for(let corner=0;corner<4;corner++){
     const ids=[],cx=(corner<2?-1:1)*2.5*S,cz=(corner%2?-1:1)*3*S;
-    for(let row=0;row<4;row++)for(let x=-1;x<=1;x++)for(let z=-1;z<=1;z++)ids.push(block([cx+x*S,bottom+(row+.5)*S,cz+z*S],[H,H,H],k%2===0&&corner===(k/2)%4?6:(k+corner)%6,'column',{towerLevel:k,towerCorner:corner,towerRow:row}).id);
+    for(let row=0;row<4;row++)for(let x=-1;x<=1;x++)for(let z=-1;z<=1;z++)ids.push(block([cx+x*S,bottom+(row+.5)*S,cz+z*S],[H,H,H],k%2===0&&corner===(k/2)%4?6:(k+corner+Math.floor(row/2)+x+z+2)%6,'column',{towerLevel:k,towerCorner:corner,towerRow:row}).id);
     l.columnIds.push(ids);
    }
    const base=block([0,baseY,0],[4*S,H,4.5*S],k%6,'floor-base',{towerLevel:k});l.baseId=base.id;
@@ -126,7 +126,9 @@
   if(p.y<t.groundY-E)finish(w,'fall');
   if(!w.result&&Math.abs(p.y-t.groundY)<E){t.settled+=STEP;if(t.settled>=.2)finish(w,null);}else t.settled=0;
   if(moved){w.revision++;w._contactCache=null;}
-  for(const d of t.personVisuals)d.center=[p.x+d.towerOffset[0],p.y+d.towerOffset[1],p.z+d.towerOffset[2]];
+  // Rotate the whole figure around its feet, using the surface it stands on.
+  const support=byId.get(p.supportId),pose=alive(support)?support.basis:I;
+  for(const d of t.personVisuals){const offset=mul(pose,d.towerOffset);d.basis=pose.slice();d.center=[p.x+offset[0],p.y+offset[1],p.z+offset[2]];}
   if(!w.result)w.status='距地面 '+Math.max(0,p.y-t.groundY).toFixed(1)+' 米 · 单次安全落差 ≤ '+t.safeDrop+' 米';
  }
  function update(w,dt){if(!w.tower||w.result||!(dt>0))return;w.tower.accumulator+=dt;while(w.tower.accumulator>=STEP-1e-10&&!w.result){w.tower.accumulator-=STEP;step(w);}}

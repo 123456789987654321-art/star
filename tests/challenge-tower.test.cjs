@@ -6,6 +6,26 @@ function remove(w,ids){return w.remove(ids);}
 function force(w,ids){for(const id of ids)w.cells.find(c=>c.id===id).color=-1;ChallengeTower.afterRemove(w,ids);}
 function advance(w,s,dt=1/60){for(let n=0;n<s-1e-9;n+=dt)ChallengeTower.update(w,Math.min(dt,s-n));}
 const cell=(w,id)=>w.cells.find(c=>c.id===id);
+
+test('removable pillars contain multiple colors with face-connected matching pairs',()=>{
+ const w=fresh();for(const ids of w.tower.floorSupports.flat()){
+  const cubes=ids.map(id=>cell(w,id));if(cubes[0].immutable){assert.ok(cubes.every(c=>c.immutable));continue;}
+  assert.ok(new Set(cubes.map(c=>c.color)).size>=3);
+  assert.ok(cubes.every(c=>cubes.some(o=>o!==c&&o.color===c.color&&Math.abs(Math.hypot(...c.center.map((v,i)=>v-o.center[i]))-.24)<1e-7)));
+ }
+});
+
+test('person tilts around the feet with the supporting floor and stands upright after landing',()=>{
+ const w=fresh(),l=w.tower.levels[5],p=w.tower.person;
+ force(w,l.columnIds.slice(0,2).flat().filter(id=>cell(w,id).towerRow===3));advance(w,.6);
+ const support=cell(w,p.supportId);assert.ok(Math.abs(support.basis[3])>.01);
+ for(const d of w.tower.personVisuals){assert.deepEqual(d.basis,support.basis);const o=d.towerOffset,b=support.basis;
+  const expected=[p.x+b[0]*o[0]+b[3]*o[1]+b[6]*o[2],p.y+b[1]*o[0]+b[4]*o[1]+b[7]*o[2],p.z+b[2]*o[0]+b[5]*o[1]+b[8]*o[2]];
+  assert.ok(d.center.every((v,i)=>Math.abs(v-expected[i])<1e-8));
+ }
+ remove(w,w.tower.floors[5]);advance(w,1.5);assert.equal(p.alive,true);
+ for(const d of w.tower.personVisuals)assert.deepEqual(d.basis,[1,0,0,0,1,0,0,0,1]);
+});
 test('six floors have one complete plate, two removable 8 by 9 layers and four 3 by 3 by 4 pillars',()=>{
  const w=fresh();assert.equal(w.tower.floors.length,6);
  for(const [i,ids] of w.tower.floors.entries()){assert.equal(ids.length,145);assert.equal(w.tower.levels[i].upperIds.length,144);assert.equal(w.tower.floorSupports[i].length,4);for(const col of w.tower.floorSupports[i])assert.equal(col.length,36);}
