@@ -19,18 +19,25 @@
   const t=w.tower={groundY:-4.8,safeDrop:1.8,step:S,floors:[],floorSupports:[],levels:[],roofSupports:[],bodies:[],personVisuals:[],accumulator:0,settled:0,failure:null,structureDirty:true,dirtyLevel:6,grid:null};
   w.components.push({id:0,name:'高楼结构'});
   const block=(center,half,color,role,extra={})=>w._cell(center,cube(half),0,{color,immutable:color===6,track:'fixed',towerHalf:half.slice(),towerRole:role,towerVelocity:0,...extra});
+  const floorColor=(level,row,x,z)=>(level+row+Math.floor(x/2)+Math.floor(z/3))%6;
   const ground=block([0,t.groundY-.18,0],[1.55,.18,1.65],6,'ground',{towerLevel:-1});t.groundId=ground.id;
   for(let k=0;k<6;k++){
    const bottom=t.groundY+k*7*S,baseY=bottom+4*S+H;
    const l={index:k,baseId:null,upperIds:[],columnIds:[],angle:0,axis:null,direction:0,velocity:0,originalY:baseY};
    for(let corner=0;corner<4;corner++){
     const ids=[],cx=(corner<2?-1:1)*2.5*S,cz=(corner%2?-1:1)*3*S;
-    for(let row=0;row<4;row++)for(let x=-1;x<=1;x++)for(let z=-1;z<=1;z++)ids.push(block([cx+x*S,bottom+(row+.5)*S,cz+z*S],[H,H,H],k%2===0&&corner===(k/2)%4?6:(k+corner+Math.floor(row/2)+x+z+2)%6,'column',{towerLevel:k,towerCorner:corner,towerRow:row}).id);
+    for(let row=0;row<4;row++)for(let x=-1;x<=1;x++)for(let z=-1;z<=1;z++){
+      const below=k?floorColor(k-1,1,(corner<2?1:6)+x,(corner%2?1:7)+z):6;
+      // Keep matching vertical pairs, but exclude both adjoining floor colors.
+      const palette=[0,1,2,3,4,5].filter(color=>color!==k%6&&color!==below);
+      const color=k%2===0&&corner===(k/2)%4?6:palette[(k+corner+Math.floor(row/2)+x+z+2)%palette.length];
+      ids.push(block([cx+x*S,bottom+(row+.5)*S,cz+z*S],[H,H,H],color,'column',{towerLevel:k,towerCorner:corner,towerRow:row}).id);
+    }
     l.columnIds.push(ids);
    }
    const base=block([0,baseY,0],[4*S,H,4.5*S],k%6,'floor-base',{towerLevel:k});l.baseId=base.id;
    for(let row=0;row<2;row++)for(let x=0;x<8;x++)for(let z=0;z<9;z++){
-    const local=[(x-3.5)*S,(row+1)*S,(z-4)*S];l.upperIds.push(block([local[0],baseY+local[1],local[2]],[H,H,H],(k+row+Math.floor(x/2)+Math.floor(z/3))%6,'floor-cube',{towerLevel:k,towerLocal:local,towerAttached:true}).id);
+    const local=[(x-3.5)*S,(row+1)*S,(z-4)*S];l.upperIds.push(block([local[0],baseY+local[1],local[2]],[H,H,H],floorColor(k,row,x,z),'floor-cube',{towerLevel:k,towerLocal:local,towerAttached:true}).id);
    }
    t.levels.push(l);t.floors.push([l.baseId,...l.upperIds]);t.floorSupports.push(l.columnIds);
   }

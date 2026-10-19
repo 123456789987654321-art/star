@@ -7,6 +7,18 @@ function force(w,ids){for(const id of ids)w.cells.find(c=>c.id===id).color=-1;Ch
 function advance(w,s,dt=1/60){for(let n=0;n<s-1e-9;n+=dt)ChallengeTower.update(w,Math.min(dt,s-n));}
 const cell=(w,id)=>w.cells.find(c=>c.id===id);
 
+test('pillar colors differ from every floor cell touching either end',()=>{
+ const w=fresh(),columns=w.cells.filter(c=>c.towerRole==='column'&&!c.immutable),floors=w.cells.filter(c=>c.towerRole.startsWith('floor-'));
+ let top=0,bottom=0;
+ for(const c of columns)for(const f of floors){
+  const gap=f.center[1]-c.center[1],height=c.towerHalf[1]+f.towerHalf[1];
+  if(Math.abs(Math.abs(gap)-height)>1e-7||[0,2].some(i=>Math.abs(c.center[i]-f.center[i])>=c.towerHalf[i]+f.towerHalf[i]-1e-7))continue;
+  assert.notEqual(c.color,f.color,'pillar '+c.id+' meets same-color floor '+f.id);
+  if(gap>0)top++;else bottom++;
+ }
+ assert.ok(top>100&&bottom>100);
+});
+
 test('removable pillars contain multiple colors with face-connected matching pairs',()=>{
  const w=fresh();for(const ids of w.tower.floorSupports.flat()){
   const cubes=ids.map(id=>cell(w,id));if(cubes[0].immutable){assert.ok(cubes.every(c=>c.immutable));continue;}
