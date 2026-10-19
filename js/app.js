@@ -943,7 +943,7 @@
       }
       const passed = this.score >= this.target;
       if (!passed) { this.gameOver('分数不足'); return; }
-      if((this.mode==='normal'&&this.level===15)||(this.mode==='challenge'&&this.level===12)) {
+      if((this.mode==='normal'&&this.level===15)||(this.mode==='challenge'&&this.level>=11)) {
         this.overlay(`<div class="ov-emoji">🎉</div><h2 class="ov-title win">${this.mode==='normal'?'普通模式全部通关':'挑战测试完成'}</h2><p class="ov-sub">第 ${this.level} 关完成 · ${this.mode==='challenge'?'本关得分':'总分'} ${this.score}</p><div class="ov-actions"><button class="ov-btn" data-act="menu">返回菜单选关</button></div>`);
         return;
       }
@@ -1007,7 +1007,12 @@
       let p=null;
       try { p=JSON.parse(window.localStorage.getItem('popstar3d.progress.'+mode+(mode==='challenge'?'.v2':''))); } catch(e) {}
       if(!p||!Number.isSafeInteger(p.next)||p.next<1||!Number.isFinite(p.score)||p.score<0||!p.cleared||typeof p.cleared!=='object')p={next:1,score:0,cleared:{}};
-      if(mode==='challenge')p.best=Object.fromEntries(Object.entries(p.best&&typeof p.best==='object'?p.best:{}).filter(([level,score])=>Number.isInteger(Number(level))&&Number(level)>=1&&Number(level)<=12&&Number.isFinite(score)&&score>=0));
+      if(mode==='challenge'){
+        p.next=Math.min(p.next,12);
+        const valid=([level,score])=>Number.isInteger(Number(level))&&Number(level)>=1&&Number(level)<=11&&Number.isFinite(score)&&score>=0;
+        p.best=Object.fromEntries(Object.entries(p.best&&typeof p.best==='object'?p.best:{}).filter(valid));
+        p.cleared=Object.fromEntries(Object.entries(p.cleared).filter(valid));
+      }
       return this.progressCache[mode]=p;
     },
     recordClear() {
@@ -1020,7 +1025,7 @@
     },
     showLevelSelect(mode) {
       this.selectMode=mode;
-      const p=this.progressFor(mode),count=mode==='normal'?15:12;
+      const p=this.progressFor(mode),count=mode==='normal'?15:11;
       let buttons='';
       for(let level=1;level<=count;level++) {
         const cleared=Object.prototype.hasOwnProperty.call(p.cleared,level);
@@ -1031,11 +1036,11 @@
         buttons+=`<button class="level-choice ${unlocked?'passed':'locked'}" ${unlocked?`data-act="selectLevel" data-level="${level}"`:'disabled'} aria-label="第 ${level} 关，${profile.title}，${unlocked?label:'未解锁'}">${level}${mode==='challenge'?'':`<small>${profile.size}×${profile.size}</small>`}<small>${profile.title}</small><small>${label}</small>${mode==='challenge'?`<small class="level-best">历史最高分：${best}</small>`:''}</button>`;
       }
       const continuation=p.next>count?'<p class="ov-sub">可选择关卡重玩</p>':`<button class="ov-btn" data-act="continueLevels">${p.next===1?'开始闯关':'继续闯关'} · 第 ${p.next} 关</button>`;
-      this.overlay(`<h2 class="ov-title">${mode==='normal'?'普通模式':'挑战模式'} · 选关</h2><p class="ov-sub">${mode==='challenge'?'全部 12 关已开放 · 可任选关卡挑战':'彩色关卡可进入 · 通关后解锁下一关'}</p><div class="level-grid">${buttons}</div><div class="ov-actions">${continuation}<button class="ov-btn plain" data-act="helpClose">返回菜单</button></div>`);
+      this.overlay(`<h2 class="ov-title">${mode==='normal'?'普通模式':'挑战模式'} · 选关</h2><p class="ov-sub">${mode==='challenge'?'全部 11 关已开放 · 可任选关卡挑战':'彩色关卡可进入 · 通关后解锁下一关'}</p><div class="level-grid">${buttons}</div><div class="ov-actions">${continuation}<button class="ov-btn plain" data-act="helpClose">返回菜单</button></div>`);
     },
     startSelectedLevel(mode,level,continuing=false) {
       const p=this.progressFor(mode);
-      if(!['normal','challenge'].includes(mode)||!Number.isSafeInteger(level)||level<1||level>(mode==='normal'?15:12)||(mode!=='challenge'&&!(Object.prototype.hasOwnProperty.call(p.cleared,level)||level===p.next)))return;
+      if(!['normal','challenge'].includes(mode)||!Number.isSafeInteger(level)||level<1||level>(mode==='normal'?15:11)||(mode!=='challenge'&&!(Object.prototype.hasOwnProperty.call(p.cleared,level)||level===p.next)))return;
       this.mode=mode;this.level=level;
       this.score=mode==='challenge'?0:(level===p.next?p.score:(p.cleared[level]??0));
       this.entryScore=this.score;this.newRecord=false;this.startLevel(true);
@@ -1050,6 +1055,7 @@
     },
 
     startLevel(first) {
+      if(this.mode==='challenge'&&(!Number.isSafeInteger(this.level)||this.level<1||this.level>11)){this.showLevelSelect('challenge');return;}
       if(this.challenge){this.challenge.dispose();this.challenge=null;}
       if(this.mode==='challenge'&&window.ChallengeGame){this.challenge=new window.ChallengeGame(this,this.level);return;}
       if(this.mode==='challenge') {this.score=0;this.newRecord=false;}

@@ -126,21 +126,21 @@ for(const mode of ['normal'])test(`${mode}: first and next available level are s
   a.startSelectedLevel(mode,3);assert.equal(starts,2);
 });
 
-test('challenge exposes all twelve levels for testing with finite replay scores',()=>{
+test('challenge exposes only eleven levels and rejects the removed twelfth level',()=>{
   const {a}=fixture();let html='',starts=0;
   a.overlay=s=>html=s;a.startLevel=()=>starts++;
   a.showLevelSelect('challenge');
-  assert.equal((html.match(/class="level-choice /g)||[]).length,12);
-  for(let level=1;level<=12;level++) {
+  assert.equal((html.match(/class="level-choice /g)||[]).length,11);
+  for(let level=1;level<=11;level++) {
     assert.ok(html.includes(`data-level="${level}"`));
     a.startSelectedLevel('challenge',level);
     assert.equal(starts,level);assert.equal(a.level,level);assert.ok(Number.isFinite(a.score));
   }
-  a.startSelectedLevel('challenge',13);assert.equal(starts,12);
+  a.startSelectedLevel('challenge',12);assert.equal(starts,11);
   a.progressCache.challenge={next:20,score:90000,cleared:{3:1200}};
   a.showLevelSelect('challenge');assert.doesNotMatch(html,/data-act="continueLevels"/);
   a.startSelectedLevel('challenge',3);assert.equal(a.score,0);
-  a.mode='challenge';a.level=12;a.target=0;a.showClearPanel();
+  a.mode='challenge';a.level=11;a.target=0;a.showClearPanel();
   assert.doesNotMatch(html,/data-act="next"/);
 });
 
@@ -160,7 +160,7 @@ test('challenge next-level initialization and restart reset score and use a loca
   ctx.document.getElementById=()=>({classList:{add(){},remove(){},toggle(){}}});
   for(const method of ['clearHint','clearHover','spawnTilesFalling','hideOverlay','setZoom','showBanner'])a[method]=()=>{};
   a.scene.particles.clear=()=>{};
-  a.mode='challenge';a.level=12;a.score=9000;a.entryScore=4000;
+  a.mode='challenge';a.level=11;a.score=9000;a.entryScore=4000;
   a.startLevel(false);assert.equal(a.score,0);assert.equal(a.entryScore,0);assert.equal(a.target,1100);
   a.score=300;a.entryScore=4000;a.restart();assert.equal(a.score,0);assert.equal(a.entryScore,0);
   a.mode='normal';assert.equal(a.targetFor(12,98),36100);

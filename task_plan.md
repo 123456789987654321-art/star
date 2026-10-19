@@ -80,3 +80,8 @@ Zoom correction complete:189 tests, all54 desktop/mobile maximum-zoom cases and 
 - Flight-time elimination, three-ball persistent holes, all previous scoring and fixed-angle launcher retained.
 - Hint prioritizes a nearby forward group; blocked ball prompts opening a route.
 - 216 tests pass; desktop/mobile browser actual input checks pass. Independent review found no issues; 21-angle gate blocking/rest-score sweep passed. Authorized star/main upload follows.
+
+## Remove challenge 12 at user request
+- Challenge picker and public launch validation now expose only levels1-11; final-level navigation stops at11.
+- Old saved level12 clear/best entries are ignored, completed next pointers cannot reopen the removed level.
+- Updated campaign docs and browser coverage. Final214 tests pass; eleven-level Edge regression report errors=[] and failed=[].

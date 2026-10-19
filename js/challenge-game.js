@@ -3,7 +3,7 @@
   'use strict';
   const IDENTITY=[1,0,0,0,1,0,0,0,1];
   const COLORS=[[.97,.24,.32],[.64,.34,.99],[.20,.85,.50],[.22,.58,1],[1,.80,.22],[1,.44,.79],[.55,.63,.76]];
-  const NAMES=['三棱锥','圆柱体','球体','高楼营救','三棱柱','棱台','十字双环','魔方消除','啮合齿轮','投射补靶','平衡跷跷板','弹珠通道'];
+  const NAMES=['三棱锥','圆柱体','球体','高楼营救','三棱柱','棱台','十字双环','魔方消除','啮合齿轮','投射补靶','平衡跷跷板'];
   const SHAPES=[['tetrahedron','三棱锥'],['cylinder','圆柱'],['sphere','球体'],['prism','三棱柱'],['frustum','棱台'],['torus','圆环']];
   const $=id=>document.getElementById(id);
   const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -279,7 +279,7 @@
         try{g.localStorage.setItem('popstar3d.progress.challenge.v2',JSON.stringify(p));}catch(e){}
         g.Sfx.levelClear();
       }else g.Sfx.gameOver();
-      this.app.overlay(`<h2 class="ov-title ${won?'win':'lose'}">${won?'本关通过':'再试一次'}</h2><p class="ov-sub">第 ${this.level} 关 · ${NAMES[this.level-1]}</p><div class="ov-rows"><div class="ov-row big"><span>本关得分</span><b>${this.world.score}</b></div><div class="ov-row"><span>本关目标</span><b>${this.world.target}</b></div></div><p class="ov-sub">${escape(this.world.status)}</p><div class="ov-actions">${won&&this.level<12?'<button class="ov-btn" data-act="next">下一关 · 从 0 分开始</button>':''}<button class="ov-btn plain" data-act="restart">重玩本关</button><button class="ov-btn plain" data-act="challengeSelect">返回挑战选关</button></div>`);
+      this.app.overlay(`<h2 class="ov-title ${won?'win':'lose'}">${won?'本关通过':'再试一次'}</h2><p class="ov-sub">第 ${this.level} 关 · ${NAMES[this.level-1]}</p><div class="ov-rows"><div class="ov-row big"><span>本关得分</span><b>${this.world.score}</b></div><div class="ov-row"><span>本关目标</span><b>${this.world.target}</b></div></div><p class="ov-sub">${escape(this.world.status)}</p><div class="ov-actions">${won&&this.level<11?'<button class="ov-btn" data-act="next">下一关 · 从 0 分开始</button>':''}<button class="ov-btn plain" data-act="restart">重玩本关</button><button class="ov-btn plain" data-act="challengeSelect">返回挑战选关</button></div>`);
     }
     help(entry=false){
       if(this.app.state!=='play')return;

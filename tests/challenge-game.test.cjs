@@ -51,7 +51,7 @@ function integrated(level=1,acknowledge=true){
   return {app,game:app.challenge,scene,ctx,nodes};
 }
 test('every challenge opens a paused instruction dialog and help can reopen it',()=>{
-  for(let level=1;level<=12;level++){
+  for(let level=1;level<=11;level++){
     const {app,game,nodes}=integrated(level,false);
     assert.equal(app.state,'paused');assert.match(nodes.get('ovCard').innerHTML,/我知道了/);
     const time=game.world.time;game.frame(.05);assert.equal(game.world.time,time);
@@ -59,6 +59,13 @@ test('every challenge opens a paused instruction dialog and help can reopen it',
     if(![8,10,11,12].includes(level))assert.equal(nodes.get('challengeControls').innerHTML,'');
     app.resume();assert.equal(app.state,'play');app.showMechanicIntro();assert.equal(app.state,'paused');
   }
+});
+test('removed marble level cannot be selected and level eleven has no next button',()=>{
+ const {app,game,nodes,ctx}=integrated(11);app.startSelectedLevel('challenge',12);assert.equal(app.challenge,game);assert.equal(app.level,11);
+ game.world.score=game.world.target;game.world.result='win';game.checkResult();assert.doesNotMatch(nodes.get('ovCard').innerHTML,/data-act="next"/);
+ app.progressCache={};ctx.localStorage.getItem=()=>JSON.stringify({next:13,score:0,cleared:{11:0,12:0},best:{11:300,12:900}});
+ const p=app.progressFor('challenge');assert.equal(p.best[11],300);assert.equal(p.best[12],undefined);assert.equal(p.cleared[12],undefined);
+ app.showLevelSelect('challenge');assert.doesNotMatch(nodes.get('ovCard').innerHTML,/data-level="12"|data-act="continueLevels"/);
 });
 function seamFixture(){
   const f=integrated(),w=f.game.world;
@@ -120,26 +127,8 @@ test('aim sliders preserve aim while paused or introducing and update during pla
   game.intro=0;panel.oninput(input);assert.equal(game.world.aim.x,2.5);
 });
 
-test('dragging the launcher aims at fixed speed without orbiting or firing on release',()=>{
- const {app,game,nodes,scene}=integrated(12),m=game.world.marble;game.frame(.2);
- assert.doesNotMatch(nodes.get('challengeControls').innerHTML,/type="range"/);
- const p=scene.project(m.launcherPivot),e={clientX:p[0],clientY:p[1],pointerId:1,button:0};
- assert.equal(game.marbleAim.pointerDown(e),true);assert.equal(game.marbleAim.pointerMove({...e,clientX:p[0]+40}),true);
- assert.ok(m.aimAngle>0);assert.ok(game.marbleAim.path.length>2);
- game.marbleAim.pointerUp(e);assert.equal(m.released,false);
- const angle=m.aimAngle;app.state='paused';assert.equal(game.marbleAim.pointerDown(e),false);assert.equal(m.aimAngle,angle);
- app.state='play';game.action('release');assert.ok(Math.abs(Math.hypot(...m.velocity)-3)<1e-9);assert.equal(game.marbleAim.pointerDown(e),false);
-});
-test('marble hint centers a real removable pair and preserves picking after the camera jump',()=>{
- const {game,scene}=integrated(12);for(let i=0;i<20;i++)game.frame(.05);
- game.hintGroup();assert.ok(game.hint.length>=2);assert.ok(game.hintFocus);
- game.frame(.01);game.hintGroup();assert.ok(game.hint.length>=2,'repeated hint while camera settles keeps the highlight');
- for(let i=0;i<20;i++)game.frame(.05);
- const ids=game.hint.slice(),p=scene.project(game.hintFocus);assert.ok(Math.abs(p[0]-400)<1);assert.ok(Math.abs(p[1]-400)<1);
- assert.ok(game.group(ids[0]).length>=2);
- const cell=game.world.cells.find(c=>c.id===ids[0]),point=scene.project(cell.center),score=game.world.score;
- game.click({clientX:point[0],clientY:point[1]});assert.ok(game.world.score>score);assert.equal(game.hintFocus,null);
-});
+
+
 test('App starts a real challenge, advances its frame and removes the clicked projected group',()=>{
   const {app,game,scene,ctx}=seamFixture();
   assert.ok(game instanceof ctx.ChallengeGame);assert.ok(game.world instanceof ctx.ChallengeWorld);
@@ -242,19 +231,10 @@ test('help return closes menu help and resumes gameplay without choosing a level
   app.startSelectedLevel('challenge',1);app.resume();app.showHelp();app.backFromHelp();assert.equal(app.state,'play');
 });
 
-test('marble channel remains centered and uses available height without overlapping HUD',()=>{
-  for(const [width,height] of [[390,844],[1440,900]]){
-    const {game,scene,ctx}=integrated(12);Object.assign(scene,{w:width,h:height,aspect:width/height});game.zoom(0);game.frame(0);
-    const points=[...game.world.cells,...game.world.decorations].flatMap(c=>ctx.ChallengeProjection.worldVertices({...c,size:[1,1,1]})).map(p=>scene.project(p));
-    const xs=points.map(p=>p[0]/width),ys=points.map(p=>p[1]/height),top=Math.min(...ys),bottom=Math.max(...ys);
-    assert.ok(top>.17&&bottom<.83,'fits central play area');assert.ok(bottom-top>.50,'channel fills available height');
-    assert.ok(Math.min(...xs)>.07&&Math.max(...xs)<.93,'fits portrait width');
-    assert.ok(Math.abs((top+bottom)/2-.5)<.03,'centered vertically');
-  }
-});
+
 
 test('challenge zoom moves across the whole slider and wheel follows the effective range after resize',()=>{
- for(const level of [8,11,12]){
+ for(const level of [8,11]){
   const {game,scene,app,nodes}=integrated(level);game.frame(0);
   for(const [width,height] of [[1440,900],[390,844]]){
    Object.assign(scene,{w:width,h:height,aspect:width/height});game.zoom(0);game.frame(0);let previous=Infinity;
